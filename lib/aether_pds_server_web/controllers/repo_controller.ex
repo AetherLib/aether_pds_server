@@ -94,7 +94,7 @@ defmodule AetherPDSServerWeb.RepoController do
       }
 
       case create_record_with_commit(did, record_attrs, "create") do
-        {:ok, record, commit} ->
+        {:ok, {record, commit}} ->
           json(conn, %{
             uri: "at://#{did}/#{collection}/#{rkey}",
             cid: record.cid,
@@ -138,7 +138,7 @@ defmodule AetherPDSServerWeb.RepoController do
         }
 
         case create_record_with_commit(did, record_attrs, "create") do
-          {:ok, record, commit} ->
+          {:ok, {record, commit}} ->
             json(conn, %{
               uri: "at://#{did}/#{collection}/#{rkey}",
               cid: record.cid,
@@ -159,7 +159,7 @@ defmodule AetherPDSServerWeb.RepoController do
         }
 
         case update_record_with_commit(did, existing_record, update_attrs) do
-          {:ok, record, commit} ->
+          {:ok, {record, commit}} ->
             json(conn, %{
               uri: "at://#{did}/#{collection}/#{rkey}",
               cid: record.cid,
@@ -393,15 +393,20 @@ defmodule AetherPDSServerWeb.RepoController do
     alias Aether.ATProto.{MST, Commit, CID}
 
     AetherPDSServer.Repo.transaction(fn ->
-      {:ok, _deleted} = Repositories.delete_record(record)
-
-      # Load current MST and remove the record
+      # Load current MST and remove the record BEFORE deleting from DB
       repo = Repositories.get_repository!(did)
       {:ok, mst} = load_mst(did)
 
       # Delete record from MST
       mst_key = "#{record.collection}/#{record.rkey}"
-      {:ok, updated_mst} = MST.delete(mst, mst_key)
+
+      updated_mst = case MST.delete(mst, mst_key) do
+        {:ok, updated} -> updated
+        {:error, :not_found} -> mst  # Key not in MST, use current MST
+      end
+
+      # Now delete from database
+      {:ok, _deleted} = Repositories.delete_record(record)
 
       # Store updated MST
       mst_root_cid = store_mst(did, updated_mst)

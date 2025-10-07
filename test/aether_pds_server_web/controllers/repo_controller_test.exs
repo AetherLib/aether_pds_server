@@ -1,7 +1,6 @@
 defmodule AetherPDSServerWeb.RepoControllerTest do
   use AetherPDSServerWeb.ConnCase
 
-  alias AetherPDSServer.Repositories
 
   setup %{conn: conn} do
     # Create account and get token
@@ -15,7 +14,6 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
     json = json_response(conn, 200)
 
     %{
-      conn: conn,
       access_token: json["accessJwt"],
       did: json["did"]
     }
@@ -40,7 +38,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
   end
 
   describe "POST /xrpc/com.atproto.repo.createRecord" do
-    test "creates record with valid attributes", %{conn: conn, access_token: token, did: did} do
+    test "creates record with valid attributes", %{access_token: token, did: did} do
       params = %{
         "repo" => did,
         "collection" => "app.bsky.feed.post",
@@ -51,7 +49,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
       }
 
       conn =
-        conn
+        build_conn()
         |> put_req_header("authorization", "Bearer #{token}")
         |> post(~p"/xrpc/com.atproto.repo.createRecord", params)
 
@@ -63,7 +61,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
       assert json["commit"]["rev"]
     end
 
-    test "creates record with custom rkey", %{conn: conn, access_token: token, did: did} do
+    test "creates record with custom rkey", %{access_token: token, did: did} do
       params = %{
         "repo" => did,
         "collection" => "app.bsky.feed.post",
@@ -74,7 +72,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
       }
 
       conn =
-        conn
+        build_conn()
         |> put_req_header("authorization", "Bearer #{token}")
         |> post(~p"/xrpc/com.atproto.repo.createRecord", params)
 
@@ -82,7 +80,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
       assert String.contains?(json["uri"], "custom123")
     end
 
-    test "returns error for duplicate record", %{conn: conn, access_token: token, did: did} do
+    test "returns error for duplicate record", %{access_token: token, did: did} do
       params = %{
         "repo" => did,
         "collection" => "app.bsky.feed.post",
@@ -91,7 +89,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
       }
 
       # Create first record
-      conn
+      build_conn()
       |> put_req_header("authorization", "Bearer #{token}")
       |> post(~p"/xrpc/com.atproto.repo.createRecord", params)
 
@@ -120,7 +118,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
   end
 
   describe "GET /xrpc/com.atproto.repo.getRecord" do
-    setup %{conn: conn, access_token: token, did: did} do
+    setup %{access_token: token, did: did} do
       # Create a record first
       params = %{
         "repo" => did,
@@ -129,7 +127,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
         "record" => %{"text" => "Test record"}
       }
 
-      conn
+      build_conn()
       |> put_req_header("authorization", "Bearer #{token}")
       |> post(~p"/xrpc/com.atproto.repo.createRecord", params)
 
@@ -162,7 +160,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
   end
 
   describe "POST /xrpc/com.atproto.repo.putRecord" do
-    test "creates new record when not exists", %{conn: conn, access_token: token, did: did} do
+    test "creates new record when not exists", %{access_token: token, did: did} do
       params = %{
         "repo" => did,
         "collection" => "app.bsky.feed.post",
@@ -171,7 +169,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
       }
 
       conn =
-        conn
+        build_conn()
         |> put_req_header("authorization", "Bearer #{token}")
         |> post(~p"/xrpc/com.atproto.repo.putRecord", params)
 
@@ -180,7 +178,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
       assert json["cid"]
     end
 
-    test "updates existing record", %{conn: conn, access_token: token, did: did} do
+    test "updates existing record", %{access_token: token, did: did} do
       rkey = "updaterecord"
 
       # Create initial record
@@ -191,7 +189,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
         "record" => %{"text" => "Original"}
       }
 
-      conn
+      build_conn()
       |> put_req_header("authorization", "Bearer #{token}")
       |> post(~p"/xrpc/com.atproto.repo.createRecord", create_params)
 
@@ -224,7 +222,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
   end
 
   describe "POST /xrpc/com.atproto.repo.deleteRecord" do
-    setup %{conn: conn, access_token: token, did: did} do
+    setup %{access_token: token, did: did} do
       # Create a record to delete
       params = %{
         "repo" => did,
@@ -233,14 +231,14 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
         "record" => %{"text" => "Delete this"}
       }
 
-      conn
+      build_conn()
       |> put_req_header("authorization", "Bearer #{token}")
       |> post(~p"/xrpc/com.atproto.repo.createRecord", params)
 
       %{rkey: "deleteme"}
     end
 
-    test "deletes existing record", %{conn: conn, access_token: token, did: did, rkey: rkey} do
+    test "deletes existing record", %{access_token: token, did: did, rkey: rkey} do
       params = %{
         "repo" => did,
         "collection" => "app.bsky.feed.post",
@@ -266,7 +264,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
       assert json_response(get_conn, 404)
     end
 
-    test "returns error for non-existent record", %{conn: conn, access_token: token, did: did} do
+    test "returns error for non-existent record", %{access_token: token, did: did} do
       params = %{
         "repo" => did,
         "collection" => "app.bsky.feed.post",
@@ -274,7 +272,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
       }
 
       conn =
-        conn
+        build_conn()
         |> put_req_header("authorization", "Bearer #{token}")
         |> post(~p"/xrpc/com.atproto.repo.deleteRecord", params)
 
@@ -284,7 +282,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
   end
 
   describe "GET /xrpc/com.atproto.repo.listRecords" do
-    setup %{conn: conn, access_token: token, did: did} do
+    setup %{access_token: token, did: did} do
       # Create multiple records
       for i <- 1..5 do
         params = %{
@@ -293,7 +291,7 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
           "record" => %{"text" => "Post #{i}"}
         }
 
-        conn
+        build_conn()
         |> put_req_header("authorization", "Bearer #{token}")
         |> post(~p"/xrpc/com.atproto.repo.createRecord", params)
       end

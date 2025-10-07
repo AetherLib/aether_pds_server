@@ -1,7 +1,6 @@
 defmodule AetherPDSServerWeb.ServerControllerTest do
   use AetherPDSServerWeb.ConnCase
 
-  alias AetherPDSServer.Accounts
 
   describe "GET /xrpc/com.atproto.server.describeServer" do
     test "returns server metadata", %{conn: conn} do

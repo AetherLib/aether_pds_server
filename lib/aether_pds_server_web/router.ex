@@ -39,6 +39,11 @@ defmodule AetherPDSServerWeb.Router do
     # Server Description
     get "/com.atproto.server.describeServer", ServerController, :describe_server
 
+    # Account Creation and Login (Public)
+    post "/com.atproto.server.createAccount", ServerController, :create_account
+    post "/com.atproto.server.createSession", ServerController, :create_session
+    post "/com.atproto.server.refreshSession", ServerController, :refresh_session
+
     # Repository - Public Reads
     get "/com.atproto.repo.describeRepo", RepoController, :describe_repo
     get "/com.atproto.repo.getRecord", RepoController, :get_record
@@ -63,10 +68,7 @@ defmodule AetherPDSServerWeb.Router do
   scope "/xrpc", AetherPDSServerWeb do
     pipe_through [:api, :authenticated]
 
-    # Account Management
-    post "/com.atproto.server.createAccount", ServerController, :create_account
-    post "/com.atproto.server.createSession", ServerController, :create_session
-    post "/com.atproto.server.refreshSession", ServerController, :refresh_session
+    # Session Management
     get "/com.atproto.server.getSession", ServerController, :get_session
     post "/com.atproto.server.deleteSession", ServerController, :delete_session
 

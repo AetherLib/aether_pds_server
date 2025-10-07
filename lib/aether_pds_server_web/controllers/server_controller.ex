@@ -54,6 +54,11 @@ defmodule AetherPDSServerWeb.ServerController do
         |> put_status(:bad_request)
         |> json(%{error: "InvalidHandle", message: "Handle format is invalid"})
 
+      {:error, :missing_params} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "InvalidRequest", message: "Missing required parameters"})
+
       {:error, changeset} ->
         conn
         |> put_status(:bad_request)

@@ -110,7 +110,7 @@ defmodule AetherPDSServer.RepositoriesTest do
 
       assert found = Repositories.get_record(did, "app.bsky.feed.post", "testrecord")
       assert found.rkey == record.rkey
-      assert found.value.text == "Test post"
+      assert found.value["text"] == "Test post"
     end
 
     test "returns nil when not found", %{did: did} do
