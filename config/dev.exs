@@ -24,7 +24,9 @@ config :aether_pds_server, AetherPDSServerWeb.Endpoint,
   code_reloader: true,
   debug_errors: true,
   secret_key_base: "qYoTcTh/bERziYbhgXIFRahF+81zYNWNoJxs37loCM0yYOXyNc0NLluaF3bTUWne",
-  watchers: []
+  watchers: [
+    esbuild: {Esbuild, :install_and_run, [:aether_pds_server, ~w(--sourcemap=inline --watch)]}
+  ]
 
 # ## SSL Support
 #

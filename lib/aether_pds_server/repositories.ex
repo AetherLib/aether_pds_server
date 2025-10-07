@@ -247,14 +247,16 @@ defmodule AetherPDSServer.Repositories do
   Creates MST blocks.
   """
   def put_mst_blocks(repository_did, blocks) when is_map(blocks) do
+    now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
     entries =
       Enum.map(blocks, fn {cid, data} ->
         %{
           repository_did: repository_did,
           cid: cid,
           data: data,
-          inserted_at: DateTime.utc_now() |> DateTime.truncate(:second),
-          updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+          inserted_at: now,
+          updated_at: now
         }
       end)
 

@@ -196,6 +196,25 @@ defmodule AetherPDSServer.OAuth do
   end
 
   @doc """
+  Get a simple access token (without DPoP validation).
+
+  Used for testing and simple authentication flows.
+  Returns {:ok, did} if valid, {:error, reason} otherwise.
+  """
+  def get_simple_access_token(token_string) do
+    query =
+      from at in AccessToken,
+        where: at.token == ^token_string,
+        where: at.revoked == false,
+        where: at.expires_at > ^DateTime.utc_now()
+
+    case Repo.one(query) do
+      nil -> {:error, :invalid_token}
+      access_token -> {:ok, access_token.did}
+    end
+  end
+
+  @doc """
   Validate an access token with DPoP proof.
 
   Returns {:ok, token_data} if valid, {:error, reason} otherwise.

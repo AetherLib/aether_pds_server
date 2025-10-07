@@ -1,5 +1,6 @@
 defmodule AetherPDSServerWeb.Router do
   use AetherPDSServerWeb, :router
+  import Phoenix.LiveView.Router
 
   pipeline :api do
     plug :accepts, ["json"]
@@ -22,12 +23,6 @@ defmodule AetherPDSServerWeb.Router do
 
     # OAuth server metadata
     get "/.well-known/oauth-authorization-server", OAuthController, :metadata
-
-    # OAuth flow
-    get "/oauth/authorize", OAuthController, :authorize
-    get "/oauth/login", OAuthController, :login_page
-    post "/oauth/login", OAuthController, :login
-    post "/oauth/authorize/consent", OAuthController, :consent
 
     # Token endpoints
     post "/oauth/token", OAuthController, :token
@@ -105,6 +100,29 @@ defmodule AetherPDSServerWeb.Router do
 
     get "/_health", HealthController, :index
     get "/xrpc/_health", HealthController, :index
+  end
+
+  # ============================================================================
+  # UI PAGES (LiveView)
+  # ============================================================================
+
+  scope "/", AetherPDSServerWeb do
+    pipe_through [:browser]
+
+    live "/", HomeLive, :index
+    live "/register", RegisterLive, :index
+    live "/oauth/login", LoginLive, :index
+    live "/oauth/authorize/consent", ConsentLive, :index
+  end
+
+  # Browser pipeline for UI pages
+  pipeline :browser do
+    plug :accepts, ["html"]
+    plug :fetch_session
+    plug :fetch_live_flash
+    plug :put_root_layout, html: {AetherPDSServerWeb.Layouts, :root}
+    plug :protect_from_forgery
+    plug :put_secure_browser_headers
   end
 
   # Enable LiveDashboard in development

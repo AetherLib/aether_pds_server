@@ -236,46 +236,67 @@ defmodule AetherPDSServerWeb.RepoController do
   # ============================================================================
 
   defp create_record_with_commit(did, record_attrs, action) do
+    alias Aether.ATProto.{MST, Commit, CID}
+
     AetherPDSServer.Repo.transaction(fn ->
       # 1. Create the record
       {:ok, record} = Repositories.create_record(record_attrs)
 
-      # 2. Build new MST with the record
-      # TODO: Load existing MST, add record, get new root
-      # For now, we'll create a simplified commit
-
-      # 3. Create commit
-      rev = generate_tid()
+      # 2. Load current MST and add the new record
       repo = Repositories.get_repository!(did)
+      {:ok, mst} = load_mst(did)
 
-      commit_data = %{
-        version: 3,
-        did: did,
-        rev: rev,
-        prev: repo.head_cid,
-        # Simplified - should be MST root
-        data: record.cid
-      }
+      # Parse the record CID
+      {:ok, record_cid} = CID.parse_cid(record.cid)
 
-      commit_cid = generate_cid(commit_data)
+      # Add record to MST (key is collection/rkey)
+      mst_key = "#{record.collection}/#{record.rkey}"
+      {:ok, updated_mst} = MST.add(mst, mst_key, record_cid)
+
+      # 3. Store updated MST and get root CID
+      mst_root_cid = store_mst(did, updated_mst)
+      mst_root_cid_string = CID.cid_to_string(mst_root_cid)
+
+      # 4. Create commit pointing to new MST root
+      rev = generate_tid()
+
+      prev_cid =
+        if repo.head_cid do
+          case CID.parse_cid(repo.head_cid) do
+            {:ok, cid} -> cid
+            _ -> nil
+          end
+        else
+          nil
+        end
+
+      commit = Commit.create(did, mst_root_cid, rev: rev, prev: prev_cid)
+      commit_cid = Commit.cid(commit)
+      commit_cid_string = CID.cid_to_string(commit_cid)
 
       commit_attrs = %{
         repository_did: did,
-        cid: commit_cid,
+        cid: commit_cid_string,
         rev: rev,
         prev: repo.head_cid,
-        data: commit_data
+        data: %{
+          version: 3,
+          did: did,
+          rev: rev,
+          data: mst_root_cid_string,
+          prev: repo.head_cid
+        }
       }
 
-      {:ok, commit} = Repositories.create_commit(commit_attrs)
+      {:ok, commit_record} = Repositories.create_commit(commit_attrs)
 
-      # 4. Update repository HEAD
-      {:ok, _repo} = Repositories.update_repository(repo, %{head_cid: commit_cid})
+      # 5. Update repository HEAD
+      {:ok, _repo} = Repositories.update_repository(repo, %{head_cid: commit_cid_string})
 
-      # 5. Create event
+      # 6. Create event
       event_attrs = %{
         repository_did: did,
-        commit_cid: commit_cid,
+        commit_cid: commit_cid_string,
         rev: rev,
         ops: [
           %{
@@ -289,42 +310,68 @@ defmodule AetherPDSServerWeb.RepoController do
 
       {:ok, _event} = Repositories.create_event(event_attrs)
 
-      {record, commit}
+      {record, commit_record}
     end)
   end
 
   defp update_record_with_commit(did, record, update_attrs) do
+    alias Aether.ATProto.{MST, Commit, CID}
+
     AetherPDSServer.Repo.transaction(fn ->
       {:ok, updated_record} = Repositories.update_record(record, update_attrs)
 
-      # Create commit (similar to create)
-      rev = generate_tid()
+      # Load current MST and update the record
       repo = Repositories.get_repository!(did)
+      {:ok, mst} = load_mst(did)
 
-      commit_data = %{
-        version: 3,
-        did: did,
-        rev: rev,
-        prev: repo.head_cid,
-        data: updated_record.cid
-      }
+      # Parse the updated record CID
+      {:ok, record_cid} = CID.parse_cid(updated_record.cid)
 
-      commit_cid = generate_cid(commit_data)
+      # Update record in MST (this is the same as add)
+      mst_key = "#{updated_record.collection}/#{updated_record.rkey}"
+      {:ok, updated_mst} = MST.add(mst, mst_key, record_cid)
+
+      # Store updated MST
+      mst_root_cid = store_mst(did, updated_mst)
+      mst_root_cid_string = CID.cid_to_string(mst_root_cid)
+
+      # Create commit
+      rev = generate_tid()
+
+      prev_cid =
+        if repo.head_cid do
+          case CID.parse_cid(repo.head_cid) do
+            {:ok, cid} -> cid
+            _ -> nil
+          end
+        else
+          nil
+        end
+
+      commit = Commit.create(did, mst_root_cid, rev: rev, prev: prev_cid)
+      commit_cid = Commit.cid(commit)
+      commit_cid_string = CID.cid_to_string(commit_cid)
 
       commit_attrs = %{
         repository_did: did,
-        cid: commit_cid,
+        cid: commit_cid_string,
         rev: rev,
         prev: repo.head_cid,
-        data: commit_data
+        data: %{
+          version: 3,
+          did: did,
+          rev: rev,
+          data: mst_root_cid_string,
+          prev: repo.head_cid
+        }
       }
 
-      {:ok, commit} = Repositories.create_commit(commit_attrs)
-      {:ok, _repo} = Repositories.update_repository(repo, %{head_cid: commit_cid})
+      {:ok, commit_record} = Repositories.create_commit(commit_attrs)
+      {:ok, _repo} = Repositories.update_repository(repo, %{head_cid: commit_cid_string})
 
       event_attrs = %{
         repository_did: did,
-        commit_cid: commit_cid,
+        commit_cid: commit_cid_string,
         rev: rev,
         ops: [
           %{
@@ -338,41 +385,65 @@ defmodule AetherPDSServerWeb.RepoController do
 
       {:ok, _event} = Repositories.create_event(event_attrs)
 
-      {updated_record, commit}
+      {updated_record, commit_record}
     end)
   end
 
   defp delete_record_with_commit(did, record) do
+    alias Aether.ATProto.{MST, Commit, CID}
+
     AetherPDSServer.Repo.transaction(fn ->
       {:ok, _deleted} = Repositories.delete_record(record)
 
-      rev = generate_tid()
+      # Load current MST and remove the record
       repo = Repositories.get_repository!(did)
+      {:ok, mst} = load_mst(did)
 
-      commit_data = %{
-        version: 3,
-        did: did,
-        rev: rev,
-        prev: repo.head_cid,
-        data: nil
-      }
+      # Delete record from MST
+      mst_key = "#{record.collection}/#{record.rkey}"
+      {:ok, updated_mst} = MST.delete(mst, mst_key)
 
-      commit_cid = generate_cid(commit_data)
+      # Store updated MST
+      mst_root_cid = store_mst(did, updated_mst)
+      mst_root_cid_string = CID.cid_to_string(mst_root_cid)
+
+      # Create commit
+      rev = generate_tid()
+
+      prev_cid =
+        if repo.head_cid do
+          case CID.parse_cid(repo.head_cid) do
+            {:ok, cid} -> cid
+            _ -> nil
+          end
+        else
+          nil
+        end
+
+      commit = Commit.create(did, mst_root_cid, rev: rev, prev: prev_cid)
+      commit_cid = Commit.cid(commit)
+      commit_cid_string = CID.cid_to_string(commit_cid)
 
       commit_attrs = %{
         repository_did: did,
-        cid: commit_cid,
+        cid: commit_cid_string,
         rev: rev,
         prev: repo.head_cid,
-        data: commit_data
+        data: %{
+          version: 3,
+          did: did,
+          rev: rev,
+          data: mst_root_cid_string,
+          prev: repo.head_cid
+        }
       }
 
-      {:ok, commit} = Repositories.create_commit(commit_attrs)
-      {:ok, _repo} = Repositories.update_repository(repo, %{head_cid: commit_cid})
+      {:ok, commit_record} = Repositories.create_commit(commit_attrs)
+      {:ok, _repo} = Repositories.update_repository(repo, %{head_cid: commit_cid_string})
 
       event_attrs = %{
         repository_did: did,
-        commit_cid: commit_cid,
+        commit_cid: commit_cid_string,
         rev: rev,
         ops: [
           %{
@@ -386,7 +457,7 @@ defmodule AetherPDSServerWeb.RepoController do
 
       {:ok, _event} = Repositories.create_event(event_attrs)
 
-      commit
+      commit_record
     end)
   end
 
@@ -406,5 +477,79 @@ defmodule AetherPDSServerWeb.RepoController do
 
   defp generate_tid do
     TID.new()
+  end
+
+  # ============================================================================
+  # MST Helper Functions
+  # ============================================================================
+
+  defp load_mst(did) do
+    alias Aether.ATProto.{MST, CID}
+
+    # Get all records for this repository and rebuild MST
+    records = Repositories.list_records(did, "*", limit: 10000)
+
+    mst = %MST{}
+
+    # Add all existing records to MST
+    mst =
+      Enum.reduce(records.records, mst, fn record, acc_mst ->
+        case CID.parse_cid(record.cid) do
+          {:ok, record_cid} ->
+            mst_key = "#{record.collection}/#{record.rkey}"
+
+            # MST.add always returns {:ok, updated_mst}, never returns error
+            {:ok, updated_mst} = MST.add(acc_mst, mst_key, record_cid)
+            updated_mst
+
+          {:error, _} ->
+            acc_mst
+        end
+      end)
+
+    {:ok, mst}
+  end
+
+  defp store_mst(did, mst) do
+    alias Aether.ATProto.{CID}
+
+    # Serialize MST to CBOR-like format
+    mst_data = serialize_mst(mst)
+
+    # Calculate CID for the MST
+    hash = :crypto.hash(:sha256, mst_data)
+    hash_encoded = Base.encode32(hash, case: :lower, padding: false)
+    cid_string = "bafyrei" <> String.slice(hash_encoded, 0..50)
+
+    {:ok, mst_cid} =
+      case CID.parse_cid(cid_string) do
+        {:ok, cid} -> {:ok, cid}
+        {:error, _} -> {:ok, CID.new(1, "dag-cbor", cid_string)}
+      end
+
+    # Store MST block in repository
+    mst_blocks = %{cid_string => mst_data}
+    Repositories.put_mst_blocks(did, mst_blocks)
+
+    mst_cid
+  end
+
+  defp serialize_mst(mst) do
+    alias Aether.ATProto.CID
+
+    # Serialize MST entries to binary
+    entries_data =
+      Enum.map(mst.entries, fn entry ->
+        %{
+          key: entry.key,
+          value: CID.cid_to_string(entry.value)
+        }
+      end)
+
+    # Use CBOR encoding
+    CBOR.encode(%{
+      layer: mst.layer,
+      entries: entries_data
+    })
   end
 end

@@ -13,7 +13,7 @@ defmodule AetherPDSServer.Accounts do
   # ============================================================================
 
   @doc """
-  Create a new account.
+  Create a new account and its repository.
   """
   def create_account(attrs) do
     # Generate a DID for the new account
@@ -25,9 +25,81 @@ defmodule AetherPDSServer.Accounts do
       |> Map.put(:password_hash, hash_password(attrs.password))
       |> Map.delete(:password)
 
-    %Account{}
-    |> Account.changeset(account_attrs)
-    |> Repo.insert()
+    # Create account and repository in a transaction
+    Repo.transaction(fn ->
+      # Create the account
+      case %Account{}
+           |> Account.changeset(account_attrs)
+           |> Repo.insert() do
+        {:ok, account} ->
+          # Create the repository
+          case create_repository_for_account(account) do
+            {:ok, _repository} -> account
+            {:error, reason} -> Repo.rollback(reason)
+          end
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
+  end
+
+  @doc """
+  Create a repository for an account with initial commit.
+  """
+  def create_repository_for_account(account) do
+    alias AetherPDSServer.Repositories
+    alias Aether.ATProto.{MST, Commit, CID}
+
+    # Create empty MST
+    mst = %MST{}
+
+    # Generate MST root CID (empty tree)
+    mst_root_cid = generate_mst_cid(mst)
+
+    # Create initial commit
+    rev = Aether.ATProto.TID.new()
+    commit = Commit.create(account.did, mst_root_cid, rev: rev)
+    commit_cid = Commit.cid(commit)
+    commit_cid_string = CID.cid_to_string(commit_cid)
+
+    # Create repository with initial commit
+    repository_attrs = %{
+      did: account.did,
+      head_cid: commit_cid_string
+    }
+
+    with {:ok, repository} <- Repositories.create_repository(repository_attrs),
+         {:ok, _commit} <-
+           Repositories.create_commit(%{
+             repository_did: account.did,
+             cid: commit_cid_string,
+             rev: rev,
+             prev: nil,
+             data: %{
+               version: 3,
+               did: account.did,
+               rev: rev,
+               data: CID.cid_to_string(mst_root_cid)
+             }
+           }) do
+      {:ok, repository}
+    end
+  end
+
+  defp generate_mst_cid(%Aether.ATProto.MST{}) do
+    alias Aether.ATProto.CID
+
+    # Generate CID for empty MST
+    # In production, this would be the actual CBOR-encoded MST data
+    hash = :crypto.hash(:sha256, "empty_mst")
+    hash_encoded = Base.encode32(hash, case: :lower, padding: false)
+    cid_string = "bafyrei" <> String.slice(hash_encoded, 0..50)
+
+    case CID.parse_cid(cid_string) do
+      {:ok, cid} -> cid
+      {:error, _} -> CID.new(1, "dag-cbor", cid_string)
+    end
   end
 
   @doc """
