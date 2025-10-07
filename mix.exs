@@ -4,7 +4,7 @@ defmodule AetherPDSServer.MixProject do
   def project do
     [
       app: :aether_pds_server,
-      version: "0.1.0",
+      version: "0.1.1",
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -52,7 +52,9 @@ defmodule AetherPDSServer.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
-      {:aether_atproto, "~> 0.1.0"}
+      {:aether_atproto, "~> 0.1.0"},
+      {:joken, "~> 2.6"},
+      {:jose, "~> 1.11"}
     ]
   end
 
