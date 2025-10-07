@@ -1,4 +1,4 @@
-defmodule AetherPdsServerWeb.Endpoint do
+defmodule AetherPDSServerWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :aether_pds_server
 
   # The session will be stored in the cookie and signed,
@@ -24,7 +24,7 @@ defmodule AetherPdsServerWeb.Endpoint do
     at: "/",
     from: :aether_pds_server,
     gzip: not code_reloading?,
-    only: AetherPdsServerWeb.static_paths()
+    only: AetherPDSServerWeb.static_paths()
 
   # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.
@@ -48,5 +48,5 @@ defmodule AetherPdsServerWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
-  plug AetherPdsServerWeb.Router
+  plug AetherPDSServerWeb.Router
 end

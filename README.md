@@ -1,4 +1,4 @@
-# AetherPdsServer
+# AetherPDSServer
 
 To start your Phoenix server:
 

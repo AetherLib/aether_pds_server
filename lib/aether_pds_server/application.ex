@@ -1,4 +1,4 @@
-defmodule AetherPdsServer.Application do
+defmodule AetherPDSServer.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false
@@ -8,19 +8,19 @@ defmodule AetherPdsServer.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      AetherPdsServerWeb.Telemetry,
-      AetherPdsServer.Repo,
+      AetherPDSServerWeb.Telemetry,
+      AetherPDSServer.Repo,
       {DNSCluster, query: Application.get_env(:aether_pds_server, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: AetherPdsServer.PubSub},
-      # Start a worker by calling: AetherPdsServer.Worker.start_link(arg)
-      # {AetherPdsServer.Worker, arg},
+      {Phoenix.PubSub, name: AetherPDSServer.PubSub},
+      # Start a worker by calling: AetherPDSServer.Worker.start_link(arg)
+      # {AetherPDSServer.Worker, arg},
       # Start to serve requests, typically the last entry
-      AetherPdsServerWeb.Endpoint
+      AetherPDSServerWeb.Endpoint
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: AetherPdsServer.Supervisor]
+    opts = [strategy: :one_for_one, name: AetherPDSServer.Supervisor]
     Supervisor.start_link(children, opts)
   end
 
@@ -28,7 +28,7 @@ defmodule AetherPdsServer.Application do
   # whenever the application is updated.
   @impl true
   def config_change(changed, _new, removed) do
-    AetherPdsServerWeb.Endpoint.config_change(changed, removed)
+    AetherPDSServerWeb.Endpoint.config_change(changed, removed)
     :ok
   end
 end

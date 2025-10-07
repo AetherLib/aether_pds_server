@@ -1,11 +1,11 @@
-defmodule AetherPdsServerWeb.Router do
-  use AetherPdsServerWeb, :router
+defmodule AetherPDSServerWeb.Router do
+  use AetherPDSServerWeb, :router
 
   pipeline :api do
     plug :accepts, ["json"]
   end
 
-  scope "/api", AetherPdsServerWeb do
+  scope "/api", AetherPDSServerWeb do
     pipe_through :api
   end
 
@@ -21,7 +21,7 @@ defmodule AetherPdsServerWeb.Router do
     scope "/dev" do
       pipe_through [:fetch_session, :protect_from_forgery]
 
-      live_dashboard "/dashboard", metrics: AetherPdsServerWeb.Telemetry
+      live_dashboard "/dashboard", metrics: AetherPDSServerWeb.Telemetry
       forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
   end

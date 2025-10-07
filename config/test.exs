@@ -5,7 +5,7 @@ import Config
 # The MIX_TEST_PARTITION environment variable can be used
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
-config :aether_pds_server, AetherPdsServer.Repo,
+config :aether_pds_server, AetherPDSServer.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
@@ -15,13 +15,13 @@ config :aether_pds_server, AetherPdsServer.Repo,
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
-config :aether_pds_server, AetherPdsServerWeb.Endpoint,
+config :aether_pds_server, AetherPDSServerWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "R1ZUGUrhaYPKz4FT+4830JqmgQRjAm5MK9IyrY39NzZyBESgbdQrYl1r02m7rrES",
   server: false
 
 # In test we don't send emails
-config :aether_pds_server, AetherPdsServer.Mailer, adapter: Swoosh.Adapters.Test
+config :aether_pds_server, AetherPDSServer.Mailer, adapter: Swoosh.Adapters.Test
 
 # Disable swoosh api client as it is only required for production adapters
 config :swoosh, :api_client, false

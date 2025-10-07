@@ -8,18 +8,18 @@
 import Config
 
 config :aether_pds_server,
-  ecto_repos: [AetherPdsServer.Repo],
+  ecto_repos: [AetherPDSServer.Repo],
   generators: [timestamp_type: :utc_datetime]
 
 # Configures the endpoint
-config :aether_pds_server, AetherPdsServerWeb.Endpoint,
+config :aether_pds_server, AetherPDSServerWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
   render_errors: [
-    formats: [json: AetherPdsServerWeb.ErrorJSON],
+    formats: [json: AetherPDSServerWeb.ErrorJSON],
     layout: false
   ],
-  pubsub_server: AetherPdsServer.PubSub,
+  pubsub_server: AetherPDSServer.PubSub,
   live_view: [signing_salt: "lj3wDXBM"]
 
 # Configures the mailer
@@ -29,7 +29,7 @@ config :aether_pds_server, AetherPdsServerWeb.Endpoint,
 #
 # For production it's recommended to configure a different adapter
 # at the `config/runtime.exs`.
-config :aether_pds_server, AetherPdsServer.Mailer, adapter: Swoosh.Adapters.Local
+config :aether_pds_server, AetherPDSServer.Mailer, adapter: Swoosh.Adapters.Local
 
 # Configures Elixir's Logger
 config :logger, :default_formatter,

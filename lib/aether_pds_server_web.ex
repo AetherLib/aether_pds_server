@@ -1,12 +1,12 @@
-defmodule AetherPdsServerWeb do
+defmodule AetherPDSServerWeb do
   @moduledoc """
   The entrypoint for defining your web interface, such
   as controllers, components, channels, and so on.
 
   This can be used in your application as:
 
-      use AetherPdsServerWeb, :controller
-      use AetherPdsServerWeb, :html
+      use AetherPDSServerWeb, :controller
+      use AetherPDSServerWeb, :html
 
   The definitions below will be executed for every controller,
   component, etc, so keep them short and clean, focused
@@ -39,7 +39,7 @@ defmodule AetherPdsServerWeb do
     quote do
       use Phoenix.Controller, formats: [:html, :json]
 
-      use Gettext, backend: AetherPdsServerWeb.Gettext
+      use Gettext, backend: AetherPDSServerWeb.Gettext
 
       import Plug.Conn
 
@@ -50,9 +50,9 @@ defmodule AetherPdsServerWeb do
   def verified_routes do
     quote do
       use Phoenix.VerifiedRoutes,
-        endpoint: AetherPdsServerWeb.Endpoint,
-        router: AetherPdsServerWeb.Router,
-        statics: AetherPdsServerWeb.static_paths()
+        endpoint: AetherPDSServerWeb.Endpoint,
+        router: AetherPDSServerWeb.Router,
+        statics: AetherPDSServerWeb.static_paths()
     end
   end
 

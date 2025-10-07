@@ -1,12 +1,14 @@
-defmodule AetherPdsServerWeb.ErrorJSONTest do
-  use AetherPdsServerWeb.ConnCase, async: true
+defmodule AetherPDSServerWeb.ErrorJSONTest do
+  use AetherPDSServerWeb.ConnCase, async: true
 
   test "renders 404" do
-    assert AetherPdsServerWeb.ErrorJSON.render("404.json", %{}) == %{errors: %{detail: "Not Found"}}
+    assert AetherPDSServerWeb.ErrorJSON.render("404.json", %{}) == %{
+             errors: %{detail: "Not Found"}
+           }
   end
 
   test "renders 500" do
-    assert AetherPdsServerWeb.ErrorJSON.render("500.json", %{}) ==
+    assert AetherPDSServerWeb.ErrorJSON.render("500.json", %{}) ==
              %{errors: %{detail: "Internal Server Error"}}
   end
 end

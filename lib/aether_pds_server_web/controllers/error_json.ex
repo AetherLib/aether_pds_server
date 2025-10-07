@@ -1,4 +1,4 @@
-defmodule AetherPdsServerWeb.ErrorJSON do
+defmodule AetherPDSServerWeb.ErrorJSON do
   @moduledoc """
   This module is invoked by your endpoint in case of errors on JSON requests.
 

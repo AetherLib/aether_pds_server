@@ -1,6 +1,6 @@
-defmodule AetherPdsServer do
+defmodule AetherPDSServer do
   @moduledoc """
-  AetherPdsServer keeps the contexts that define your domain
+  AetherPDSServer keeps the contexts that define your domain
   and business logic.
 
   Contexts are also responsible for managing your data, regardless
