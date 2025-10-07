@@ -106,7 +106,7 @@ defmodule AetherPDSServerWeb.OAuthController do
     # Render login page (you'll need to create this template)
     conn
     |> put_layout(false)
-    |> render("login.html", client_name: client_name, error: get_flash(conn, :error))
+    |> render("login.html", client_name: client_name)
   end
 
   @doc """

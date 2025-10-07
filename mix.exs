@@ -54,7 +54,8 @@ defmodule AetherPDSServer.MixProject do
       {:bandit, "~> 1.5"},
       {:aether_atproto, "~> 0.1.2"},
       {:joken, "~> 2.6"},
-      {:jose, "~> 1.11"}
+      {:jose, "~> 1.11"},
+      {:argon2_elixir, "~> 4.0"}
     ]
   end
 
