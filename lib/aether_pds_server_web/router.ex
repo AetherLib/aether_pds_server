@@ -98,22 +98,33 @@ defmodule AetherPDSServerWeb.Router do
     pipe_through [:api, :authenticated, :admin]
 
     # Server Administration
-    post "/com.atproto.server.createInviteCode", ServerController, :create_invite_code
-    post "/com.atproto.server.createInviteCodes", ServerController, :create_invite_codes
-    get "/com.atproto.server.getAccountInviteCodes", ServerController, :get_account_invite_codes
+    # post "/com.atproto.server.createInviteCode", ServerController, :create_invite_code
+    # post "/com.atproto.server.createInviteCodes", ServerController, :create_invite_codes
+    # get "/com.atproto.server.getAccountInviteCodes", ServerController, :get_account_invite_codes
 
     # Moderation/Admin
-    post "/com.atproto.admin.deleteAccount", AdminController, :delete_account
-    post "/com.atproto.admin.disableAccount", AdminController, :disable_account
-    post "/com.atproto.admin.enableAccount", AdminController, :enable_account
-    get "/com.atproto.admin.getAccountInfo", AdminController, :get_account_info
-    get "/com.atproto.admin.getAccountInfos", AdminController, :get_account_infos
-    post "/com.atproto.admin.updateAccountEmail", AdminController, :update_account_email
-    post "/com.atproto.admin.updateAccountHandle", AdminController, :update_account_handle
+    # post "/com.atproto.admin.deleteAccount", AdminController, :delete_account
+    # post "/com.atproto.admin.disableAccount", AdminController, :disable_account
+    # post "/com.atproto.admin.enableAccount", AdminController, :enable_account
+    # get "/com.atproto.admin.getAccountInfo", AdminController, :get_account_info
+    # get "/com.atproto.admin.getAccountInfos", AdminController, :get_account_infos
+    # post "/com.atproto.admin.updateAccountEmail", AdminController, :update_account_email
+    # post "/com.atproto.admin.updateAccountHandle", AdminController, :update_account_handle
 
     # Sync Administration
     post "/com.atproto.sync.notifyOfUpdate", SyncController, :notify_of_update
     post "/com.atproto.sync.requestCrawl", SyncController, :request_crawl
+  end
+
+  # ============================================================================
+  # HEALTH CHECK / STATUS (Public)
+  # ============================================================================
+
+  scope "/", AetherPDSServerWeb do
+    pipe_through :api
+
+    get "/_health", HealthController, :index
+    get "/xrpc/_health", HealthController, :index
   end
 
   # ============================================================================
