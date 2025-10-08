@@ -72,6 +72,12 @@ defmodule AetherPDSServer.MixProject do
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
+      "assets.setup": ["esbuild.install --if-missing"],
+      "assets.build": ["esbuild aether_pds_server"],
+      "assets.deploy": [
+        "esbuild aether_pds_server --minify",
+        "phx.digest"
+      ],
       precommit: ["compile --warning-as-errors", "deps.unlock --unused", "format", "test"]
     ]
   end
