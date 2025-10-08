@@ -308,6 +308,7 @@ defmodule AetherPDSServerWeb.RepoController do
   # ============================================================================
   # Batch Write Operations
   # ============================================================================
+
   # Apply batch writes atomically with a single commit
   defp apply_batch_writes(repo_did, writes, _validate, _swap_commit) do
     AetherPDSServer.Repo.transaction(fn ->
@@ -338,7 +339,6 @@ defmodule AetherPDSServerWeb.RepoController do
 
       # Create a single commit for all operations
       mst_root_cid = store_mst(repo_did, updated_mst)
-      mst_root_cid_string = CID.cid_to_string(mst_root_cid)
 
       rev = generate_tid()
 
@@ -354,8 +354,9 @@ defmodule AetherPDSServerWeb.RepoController do
 
       commit = Commit.create(repo_did, mst_root_cid, rev: rev, prev: prev_cid)
 
-      commit_cbor = Commit.to_cbor(commit)
-      commit_cid_string = CID.from_data(commit_cbor, "dag-cbor")
+      # Generate proper commit CID using the updated Commit.cid/1
+      commit_cid = Commit.cid(commit)
+      commit_cid_string = CID.cid_to_string(commit_cid)
 
       commit_attrs = %{
         repository_did: repo_did,
@@ -366,7 +367,7 @@ defmodule AetherPDSServerWeb.RepoController do
           version: 3,
           did: repo_did,
           rev: rev,
-          data: mst_root_cid_string,
+          data: CID.cid_to_string(mst_root_cid),
           prev: repo.head_cid
         }
       }
@@ -556,7 +557,6 @@ defmodule AetherPDSServerWeb.RepoController do
 
       # 3. Store updated MST and get root CID
       mst_root_cid = store_mst(did, updated_mst)
-      mst_root_cid_string = CID.cid_to_string(mst_root_cid)
 
       # 4. Create commit pointing to new MST root
       rev = generate_tid()
@@ -572,6 +572,8 @@ defmodule AetherPDSServerWeb.RepoController do
         end
 
       commit = Commit.create(did, mst_root_cid, rev: rev, prev: prev_cid)
+
+      # Use the updated Commit.cid/1 which now generates proper CIDs
       commit_cid = Commit.cid(commit)
       commit_cid_string = CID.cid_to_string(commit_cid)
 
@@ -584,7 +586,7 @@ defmodule AetherPDSServerWeb.RepoController do
           version: 3,
           did: did,
           rev: rev,
-          data: mst_root_cid_string,
+          data: CID.cid_to_string(mst_root_cid),
           prev: repo.head_cid
         }
       }
@@ -632,7 +634,6 @@ defmodule AetherPDSServerWeb.RepoController do
 
       # Store updated MST
       mst_root_cid = store_mst(did, updated_mst)
-      mst_root_cid_string = CID.cid_to_string(mst_root_cid)
 
       # Create commit
       rev = generate_tid()
@@ -648,6 +649,8 @@ defmodule AetherPDSServerWeb.RepoController do
         end
 
       commit = Commit.create(did, mst_root_cid, rev: rev, prev: prev_cid)
+
+      # Use the updated Commit.cid/1
       commit_cid = Commit.cid(commit)
       commit_cid_string = CID.cid_to_string(commit_cid)
 
@@ -660,7 +663,7 @@ defmodule AetherPDSServerWeb.RepoController do
           version: 3,
           did: did,
           rev: rev,
-          data: mst_root_cid_string,
+          data: CID.cid_to_string(mst_root_cid),
           prev: repo.head_cid
         }
       }
@@ -708,7 +711,6 @@ defmodule AetherPDSServerWeb.RepoController do
 
       # Store updated MST
       mst_root_cid = store_mst(did, updated_mst)
-      mst_root_cid_string = CID.cid_to_string(mst_root_cid)
 
       # Create commit
       rev = generate_tid()
@@ -724,6 +726,8 @@ defmodule AetherPDSServerWeb.RepoController do
         end
 
       commit = Commit.create(did, mst_root_cid, rev: rev, prev: prev_cid)
+
+      # Use the updated Commit.cid/1
       commit_cid = Commit.cid(commit)
       commit_cid_string = CID.cid_to_string(commit_cid)
 
@@ -736,7 +740,7 @@ defmodule AetherPDSServerWeb.RepoController do
           version: 3,
           did: did,
           rev: rev,
-          data: mst_root_cid_string,
+          data: CID.cid_to_string(mst_root_cid),
           prev: repo.head_cid
         }
       }
@@ -764,6 +768,7 @@ defmodule AetherPDSServerWeb.RepoController do
     end)
   end
 
+  # Use CID.from_map for consistent CID generation
   defp generate_cid(data) when is_map(data) do
     CID.from_map(data)
   end
@@ -800,19 +805,12 @@ defmodule AetherPDSServerWeb.RepoController do
   end
 
   defp store_mst(did, mst) do
-    # Serialize MST to CBOR-like format
+    # Serialize MST to CBOR
     mst_data = serialize_mst(mst)
 
-    # Calculate CID for the MST
-    hash = :crypto.hash(:sha256, mst_data)
-    hash_encoded = Base.encode32(hash, case: :lower, padding: false)
-    cid_string = "bafyrei" <> String.slice(hash_encoded, 0..50)
-
-    {:ok, mst_cid} =
-      case CID.parse_cid(cid_string) do
-        {:ok, cid} -> {:ok, cid}
-        {:error, _} -> {:ok, CID.new(1, "dag-cbor", cid_string)}
-      end
+    # Generate proper CIDv1 using CID.from_data
+    cid_string = CID.from_data(mst_data, "dag-cbor")
+    {:ok, mst_cid} = CID.parse_cid(cid_string)
 
     # Store MST block in repository
     mst_blocks = %{cid_string => mst_data}
@@ -822,7 +820,7 @@ defmodule AetherPDSServerWeb.RepoController do
   end
 
   defp serialize_mst(mst) do
-    # Serialize MST entries to binary
+    # Serialize MST entries to CBOR
     entries_data =
       Enum.map(mst.entries, fn entry ->
         %{
