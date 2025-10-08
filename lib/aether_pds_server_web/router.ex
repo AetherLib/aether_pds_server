@@ -4,6 +4,14 @@ defmodule AetherPDSServerWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+
+    plug Corsica,
+      # Allow all origins (or specify specific domains)
+      origins: "*",
+      allow_headers: ["authorization", "content-type", "dpop", "atproto-accept-labelers"],
+      allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allow_credentials: true,
+      max_age: 86400
   end
 
   pipeline :authenticated do
