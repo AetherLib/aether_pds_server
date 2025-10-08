@@ -387,7 +387,7 @@ defmodule AetherPDSServerWeb.RepoController do
       {:ok, _event} = Repositories.create_event(event_attrs)
 
       # Return results and commit info
-      {commit_record, Enum.reverse(results)}
+      {Enum.reverse(results), commit_record}
     end)
   end
 
