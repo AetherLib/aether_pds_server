@@ -353,8 +353,9 @@ defmodule AetherPDSServerWeb.RepoController do
         end
 
       commit = Commit.create(repo_did, mst_root_cid, rev: rev, prev: prev_cid)
-      commit_cid = Commit.cid(commit)
-      commit_cid_string = CID.cid_to_string(commit_cid)
+
+      commit_cbor = Commit.to_cbor(commit)
+      commit_cid_string = CID.from_data(commit_cbor, "dag-cbor")
 
       commit_attrs = %{
         repository_did: repo_did,
@@ -764,16 +765,7 @@ defmodule AetherPDSServerWeb.RepoController do
   end
 
   defp generate_cid(data) when is_map(data) do
-    # Create a proper CID using your library
-    hash = :crypto.hash(:sha256, Jason.encode!(data))
-    encoded = Base.encode32(hash, case: :lower, padding: false)
-    cid_string = "bafyrei" <> String.slice(encoded, 0..50)
-
-    # Parse and validate it as a CID
-    case CID.parse_cid(cid_string) do
-      {:ok, cid} -> CID.cid_to_string(cid)
-      {:error, _} -> cid_string
-    end
+    CID.from_map(data)
   end
 
   defp generate_tid do
