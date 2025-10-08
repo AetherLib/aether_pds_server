@@ -46,6 +46,7 @@ defmodule AetherPDSServerWeb.ServerController do
       # Create initial session tokens
       {:ok, access_token} = Accounts.create_access_token(account.did)
       {:ok, refresh_token} = Accounts.create_refresh_token(account.did)
+
       did_doc = build_did_document(account.did, account.handle)
 
       response = %{
@@ -154,7 +155,6 @@ defmodule AetherPDSServerWeb.ServerController do
   """
   def get_session(conn, _params) do
     did = conn.assigns[:current_did]
-    did_doc = build_did_document(account.did, account.handle)
 
     case Accounts.get_account_by_did(did) do
       nil ->
@@ -163,6 +163,8 @@ defmodule AetherPDSServerWeb.ServerController do
         |> json(%{error: "AccountNotFound", message: "Account not found"})
 
       account ->
+        did_doc = build_did_document(account.did, account.handle)
+
         response = %{
           handle: account.handle,
           did: account.did,
