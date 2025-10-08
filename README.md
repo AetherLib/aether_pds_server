@@ -23,9 +23,14 @@ A Personal Data Server (PDS) implementation for the AT Protocol (ATProto), built
 **Data Storage**
 - Record operations (create, read, update, delete)
 - Collection-based organization
-- Blob storage with CID addressing
-- Blob references tracking
 - Pagination with cursor support
+
+**Blob Storage** (⚠️ Basic Implementation)
+- Upload endpoint (stores in PostgreSQL)
+- CID generation (simplified)
+- Blob metadata tracking
+- Reference tracking schema
+- ⚠️ **Missing**: Object storage (S3/MinIO), retrieval endpoints, proper CIDv1, size limits
 
 **Sync Protocol**
 - Event stream for repository changes
@@ -70,7 +75,13 @@ A Personal Data Server (PDS) implementation for the AT Protocol (ATProto), built
 - [ ] IP-based access controls
 
 **Phase 4: Data Management**
+- [ ] Object storage integration (S3/MinIO/local filesystem)
+- [ ] Blob retrieval endpoints
+- [ ] Proper CIDv1 generation with multihash
+- [ ] Blob size limits and validation
+- [ ] Blob-to-record linking implementation
 - [ ] Blob deduplication
+- [ ] Blob garbage collection
 - [ ] Lexicon schema validation
 - [ ] Repository backup/restore
 - [ ] Data retention policies
