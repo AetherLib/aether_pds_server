@@ -400,7 +400,8 @@ defmodule AetherPDSServerWeb.RepoController do
     if Repositories.record_exists?(repo_did, collection, rkey) do
       result = %{
         "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
-        "cid" => nil
+        "cid" => nil,
+        "validationStatus" => "unknown"
       }
 
       op = nil
@@ -426,7 +427,8 @@ defmodule AetherPDSServerWeb.RepoController do
 
           result = %{
             "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
-            "cid" => record.cid
+            "cid" => record.cid,
+            "validationStatus" => "unknown"
           }
 
           op = %{
