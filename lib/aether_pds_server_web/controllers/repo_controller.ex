@@ -287,8 +287,12 @@ defmodule AetherPDSServerWeb.RepoController do
 
           # Apply writes in a transaction
           case apply_batch_writes(repo, writes, validate, swap_commit) do
-            {:ok, results} ->
+            {:ok, {results, commit}} ->
               json(conn, %{
+                commit: %{
+                  cid: commit.cid,
+                  rev: commit.rev
+                },
                 results: results
               })
 
@@ -304,14 +308,12 @@ defmodule AetherPDSServerWeb.RepoController do
   # ============================================================================
   # Batch Write Operations
   # ============================================================================
+  # Apply batch writes atomically with a single commit
   defp apply_batch_writes(repo_did, writes, _validate, _swap_commit) do
     AetherPDSServer.Repo.transaction(fn ->
       # Load current repository and MST
       repo = Repositories.get_repository!(repo_did)
       {:ok, mst} = load_mst(repo_did)
-
-      # Track operations for the commit
-      ops = []
 
       # Process each write and build results
       {results, updated_mst, ops} =
@@ -368,7 +370,7 @@ defmodule AetherPDSServerWeb.RepoController do
         }
       }
 
-      {:ok, _commit_record} = Repositories.create_commit(commit_attrs)
+      {:ok, commit_record} = Repositories.create_commit(commit_attrs)
       {:ok, _repo} = Repositories.update_repository(repo, %{head_cid: commit_cid_string})
 
       # Create event with all operations
@@ -382,8 +384,8 @@ defmodule AetherPDSServerWeb.RepoController do
 
       {:ok, _event} = Repositories.create_event(event_attrs)
 
-      # Return results in correct order
-      Enum.reverse(results)
+      # Return results and commit info
+      {Enum.reverse(results), commit_record}
     end)
   end
 
