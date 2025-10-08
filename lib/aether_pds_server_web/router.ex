@@ -59,6 +59,7 @@ defmodule AetherPDSServerWeb.Router do
 
     # Identity Resolution - Public
     get "/com.atproto.identity.resolveHandle", IdentityController, :resolve_handle
+    get "/com.atproto.identity.resolveDid", IdentityController, :resolve_did
   end
 
   # ============================================================================

@@ -9,7 +9,14 @@ import Config
 
 config :aether_pds_server,
   ecto_repos: [AetherPDSServer.Repo],
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  # HTTP client options for DID resolution
+  req_options: [
+    connect_options: [timeout: 5_000],
+    receive_timeout: 10_000,
+    retry: :transient,
+    max_retries: 2
+  ]
 
 # Configures the endpoint
 config :aether_pds_server, AetherPDSServerWeb.Endpoint,

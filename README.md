@@ -43,22 +43,27 @@ A Personal Data Server (PDS) implementation for the AT Protocol (ATProto), built
 - OAuth consent flow (LiveView)
 - Login interface (LiveView)
 
-### 🚧 In Progress
-
-**Federation & Discovery**
-- DID resolution via PLC directory
-- Relay/AppView communication
-- Webhook notifications for commits
-- Firehose event subscriptions
+**Federation & Discovery** (✅ Core Implemented)
+- ✅ DID resolution via PLC directory (did:plc and did:web)
+- ✅ Handle resolution (HTTPS well-known + DNS TXT records)
+- ✅ DID document generation and validation
+- ✅ Remote PDS discovery from handles/DIDs
+- ✅ Cross-server record fetching
+- ✅ Service endpoint extraction
+- ⚠️ **Missing**: Relay integration, firehose subscriptions, commit verification
 
 ### 📋 Roadmap
 
-**Phase 1: Federation Core**
-- [ ] DID resolution and verification
+**Phase 1: Federation Core** (✅ 60% Complete)
+- [x] DID resolution (plc.directory integration)
+- [x] Handle resolution (HTTPS + DNS)
+- [x] DID document generation
+- [x] Cross-server PDS discovery
+- [x] Remote record fetching
+- [ ] Commit signature verification
 - [ ] Relay server integration
 - [ ] AppView subscriptions
-- [ ] Cross-server identity resolution
-- [ ] PLC directory integration
+- [ ] Firehose event stream subscriptions
 
 **Phase 2: Performance & Reliability**
 - [ ] Redis caching layer
@@ -179,6 +184,22 @@ Tests account creation → repository creation → record CRUD → CAR export. R
 - DPoP verification
 - Token lifecycle
 - Client validation
+
+**Federation** (`lib/aether_pds_server/federation.ex`)
+- Remote PDS discovery
+- Cross-server record fetching
+- Repository verification (basic)
+
+**DID Resolution** (`lib/aether_pds_server/did_resolver.ex`)
+- Handle → DID resolution
+- DID → DID document resolution
+- Service endpoint extraction
+- Support for did:plc and did:web
+
+**DID Documents** (`lib/aether_pds_server/did_document.ex`)
+- DID document generation
+- Validation
+- Service endpoint management
 
 ### API Structure
 
