@@ -107,6 +107,7 @@ defmodule AetherPDSServerWeb.ServerController do
         |> put_status(:unauthorized)
         |> json(%{error: "AuthenticationFailed", message: "Invalid credentials"})
     end
+    |> dbg()
   end
 
   @doc """
