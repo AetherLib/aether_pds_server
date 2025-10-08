@@ -27,5 +27,5 @@ aether_pds_server-*.tar
 
 /.elixir_ls/
 
-
 .env
+/priv/static/assets

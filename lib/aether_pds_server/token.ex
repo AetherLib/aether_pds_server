@@ -19,9 +19,8 @@ defmodule AetherPDSServer.Token do
       "exp" => Joken.current_time() + 3600
     }
 
-    token_config = Joken.Config.default_claims()
-
-    Joken.generate_and_sign(token_config, claims, signer)
+    # Use empty config (no validators)
+    Joken.generate_and_sign(%{}, claims, signer)
   end
 
   @doc """
@@ -39,9 +38,8 @@ defmodule AetherPDSServer.Token do
       "exp" => Joken.current_time() + 60 * 60 * 24 * 30
     }
 
-    token_config = Joken.Config.default_claims()
-
-    Joken.generate_and_sign(token_config, claims, signer)
+    # Use empty config (no validators)
+    Joken.generate_and_sign(%{}, claims, signer)
   end
 
   @doc """
@@ -49,9 +47,12 @@ defmodule AetherPDSServer.Token do
   """
   def verify_token(token) do
     signer = get_signer()
-    token_config = Joken.Config.default_claims()
 
-    Joken.verify_and_validate(token_config, token, signer)
+    # Use empty config (no validators) - just verify signature
+    case Joken.verify_and_validate(%{}, token, signer) do
+      {:ok, claims} -> {:ok, claims}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp get_signer do

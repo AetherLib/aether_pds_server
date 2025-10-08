@@ -28,11 +28,13 @@ defmodule AetherPDSServerWeb.Endpoint do
 
   # Handle CORS
   plug Corsica,
-    origins: "*",
-    allow_headers: ["authorization", "content-type", "dpop", "atproto-accept-labelers"],
-    allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    # Allow any origin
+    origins: ~r/.*/,
+    allow_headers: :all,
+    allow_methods: :all,
     allow_credentials: true,
-    max_age: 600
+    max_age: 600,
+    log: [rejected: :warn, invalid: :warn, accepted: :debug]
 
   # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.
