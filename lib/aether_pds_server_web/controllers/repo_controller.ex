@@ -401,7 +401,7 @@ defmodule AetherPDSServerWeb.RepoController do
       result = %{
         "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
         "cid" => nil,
-        "validationStatus" => "invalid"
+        "validationStatus" => nil
       }
 
       op = nil
@@ -428,7 +428,7 @@ defmodule AetherPDSServerWeb.RepoController do
           result = %{
             "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
             "cid" => record.cid,
-            "validationStatus" => "valid"
+            "validationStatus" => "nil"
           }
 
           op = %{
