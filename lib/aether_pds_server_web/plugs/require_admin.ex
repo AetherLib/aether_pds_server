@@ -1,26 +1,48 @@
-defmodule AetherPDSServerWeb.Plugs.RequireAdmin do
+# lib/aether_pds_server_web/plugs/require_auth.ex
+defmodule AetherPDSServerWeb.Plugs.RequireAuth do
   import Plug.Conn
   import Phoenix.Controller
 
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    did = conn.assigns[:current_did]
+    case get_req_header(conn, "authorization") do
+      ["Bearer " <> token] ->
+        case AetherPDSServer.Token.verify_token(token) do
+          {:ok, %{"sub" => did}} ->
+            conn
+            |> assign(:current_did, did)
+            |> assign(:authenticated, true)
 
-    if is_admin?(did) do
-      conn
-    else
-      conn
-      |> put_status(:forbidden)
-      |> json(%{error: "Forbidden", message: "Admin privileges required"})
-      |> halt()
+          {:error, _reason} ->
+            conn
+            |> add_cors_headers()
+            |> put_status(:unauthorized)
+            |> json(%{error: "AuthenticationRequired", message: "Valid authentication required"})
+            |> halt()
+        end
+
+      _ ->
+        conn
+        |> add_cors_headers()
+        |> put_status(:unauthorized)
+        |> json(%{error: "AuthenticationRequired", message: "Valid authentication required"})
+        |> halt()
     end
   end
 
-  defp is_admin?(did) do
-    # TODO: Check if DID has admin privileges
-    # For now, check config
-    admin_dids = Application.get_env(:aether_pds_server, :admin_dids, [])
-    did in admin_dids
+  # Add CORS headers to error responses
+  defp add_cors_headers(conn) do
+    origin = get_req_header(conn, "origin") |> List.first() || "*"
+
+    conn
+    |> put_resp_header("access-control-allow-origin", origin)
+    |> put_resp_header("access-control-allow-credentials", "true")
+    |> put_resp_header("access-control-allow-methods", "GET, POST, PUT, DELETE, OPTIONS")
+    |> put_resp_header(
+      "access-control-allow-headers",
+      "authorization, content-type, dpop, atproto-accept-labelers"
+    )
+    |> put_resp_header("access-control-max-age", "600")
   end
 end

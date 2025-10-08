@@ -26,7 +26,7 @@ defmodule AetherPDSServerWeb.Endpoint do
     gzip: not code_reloading?,
     only: AetherPDSServerWeb.static_paths()
 
-  # Handle CORS - ADD THIS
+  # Handle CORS
   plug Corsica,
     origins: "*",
     allow_headers: ["authorization", "content-type", "dpop", "atproto-accept-labelers"],
