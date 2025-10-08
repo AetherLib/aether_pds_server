@@ -84,7 +84,9 @@ defmodule AetherPDSServerWeb.ServerController do
 
   Create a new session (login)
   """
-  def create_session(conn, %{"identifier" => identifier, "password" => password}) do
+  def create_session(conn, %{"identifier" => identifier, "password" => password} = params) do
+    dbg(params)
+
     case Accounts.authenticate(identifier, password) do
       {:ok, account} ->
         {:ok, access_token} = Accounts.create_access_token(account.did)
