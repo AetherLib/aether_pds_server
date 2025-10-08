@@ -5,6 +5,7 @@ defmodule AetherPDSServer.Accounts do
   """
 
   alias AetherPDSServer.Repo
+  alias AetherPDSServer.Repositories
   alias AetherPDSServer.Accounts.Account
   alias AetherPDSServer.OAuth
 
