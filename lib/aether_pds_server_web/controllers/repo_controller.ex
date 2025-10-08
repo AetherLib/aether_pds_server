@@ -428,7 +428,7 @@ defmodule AetherPDSServerWeb.RepoController do
           result = %{
             "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
             "cid" => record.cid,
-            "validationStatus" => "nil"
+            "validationStatus" => nil
           }
 
           op = %{
