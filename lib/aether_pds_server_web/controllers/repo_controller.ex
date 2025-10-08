@@ -6,7 +6,7 @@ defmodule AetherPDSServerWeb.RepoController do
 
   alias AetherPDSServer.Repositories
   alias AetherPDSServer.Repositories.{Repository, Record}
-  alias Aether.ATProto.{CID, TID}
+  alias Aether.ATProto.{CID, TID, MST, Commit}
 
   # ============================================================================
   # Repository Management Endpoints
@@ -66,69 +66,33 @@ defmodule AetherPDSServerWeb.RepoController do
   POST /xrpc/com.atproto.repo.createRecord
   """
   def create_record(conn, params) do
+    current_did = conn.assigns[:current_did]
+
     %{
       "repo" => did,
       "collection" => collection,
       "record" => record_data
     } = params
 
-    # Generate rkey if not provided
-    rkey = Map.get(params, "rkey") || generate_tid()
-
-    # Validate record doesn't exist
-    if Repositories.record_exists?(did, collection, rkey) do
+    # Verify the user owns this repository
+    if did != current_did do
       conn
-      |> put_status(:conflict)
-      |> json(%{error: "RecordAlreadyExists", message: "Record already exists"})
+      |> put_status(:forbidden)
+      |> json(%{error: "Forbidden", message: "Cannot write to another user's repository"})
     else
-      # Calculate CID for the record
-      record_cid = generate_cid(record_data)
+      # Generate rkey if not provided
+      rkey = Map.get(params, "rkey") || generate_tid()
 
-      # Create the record
-      record_attrs = %{
-        repository_did: did,
-        collection: collection,
-        rkey: rkey,
-        cid: record_cid,
-        value: record_data
-      }
+      # Validate record doesn't exist
+      if Repositories.record_exists?(did, collection, rkey) do
+        conn
+        |> put_status(:conflict)
+        |> json(%{error: "RecordAlreadyExists", message: "Record already exists"})
+      else
+        # Calculate CID for the record
+        record_cid = generate_cid(record_data)
 
-      case create_record_with_commit(did, record_attrs, "create") do
-        {:ok, {record, commit}} ->
-          json(conn, %{
-            uri: "at://#{did}/#{collection}/#{rkey}",
-            cid: record.cid,
-            commit: %{
-              cid: commit.cid,
-              rev: commit.rev
-            }
-          })
-
-        {:error, reason} ->
-          conn
-          |> put_status(:bad_request)
-          |> json(%{error: "InvalidRequest", message: inspect(reason)})
-      end
-    end
-  end
-
-  @doc """
-  POST /xrpc/com.atproto.repo.putRecord
-  """
-  def put_record(conn, params) do
-    %{
-      "repo" => did,
-      "collection" => collection,
-      "rkey" => rkey,
-      "record" => record_data
-    } = params
-
-    # Calculate CID for the record
-    record_cid = generate_cid(record_data)
-
-    case Repositories.get_record(did, collection, rkey) do
-      nil ->
-        # Create new record
+        # Create the record
         record_attrs = %{
           repository_did: did,
           collection: collection,
@@ -142,52 +106,6 @@ defmodule AetherPDSServerWeb.RepoController do
             json(conn, %{
               uri: "at://#{did}/#{collection}/#{rkey}",
               cid: record.cid,
-              commit: %{cid: commit.cid, rev: commit.rev}
-            })
-
-          {:error, reason} ->
-            conn
-            |> put_status(:bad_request)
-            |> json(%{error: "InvalidRequest", message: inspect(reason)})
-        end
-
-      %Record{} = existing_record ->
-        # Update existing record
-        update_attrs = %{
-          cid: record_cid,
-          value: record_data
-        }
-
-        case update_record_with_commit(did, existing_record, update_attrs) do
-          {:ok, {record, commit}} ->
-            json(conn, %{
-              uri: "at://#{did}/#{collection}/#{rkey}",
-              cid: record.cid,
-              commit: %{cid: commit.cid, rev: commit.rev}
-            })
-
-          {:error, reason} ->
-            conn
-            |> put_status(:bad_request)
-            |> json(%{error: "InvalidRequest", message: inspect(reason)})
-        end
-    end
-  end
-
-  @doc """
-  POST /xrpc/com.atproto.repo.deleteRecord
-  """
-  def delete_record(conn, %{"repo" => did, "collection" => collection, "rkey" => rkey}) do
-    case Repositories.get_record(did, collection, rkey) do
-      nil ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "RecordNotFound", message: "Record not found"})
-
-      %Record{} = record ->
-        case delete_record_with_commit(did, record) do
-          {:ok, commit} ->
-            json(conn, %{
               commit: %{
                 cid: commit.cid,
                 rev: commit.rev
@@ -199,6 +117,115 @@ defmodule AetherPDSServerWeb.RepoController do
             |> put_status(:bad_request)
             |> json(%{error: "InvalidRequest", message: inspect(reason)})
         end
+      end
+    end
+  end
+
+  @doc """
+  POST /xrpc/com.atproto.repo.putRecord
+  """
+  def put_record(conn, params) do
+    current_did = conn.assigns[:current_did]
+
+    %{
+      "repo" => did,
+      "collection" => collection,
+      "rkey" => rkey,
+      "record" => record_data
+    } = params
+
+    # Verify the user owns this repository
+    if did != current_did do
+      conn
+      |> put_status(:forbidden)
+      |> json(%{error: "Forbidden", message: "Cannot write to another user's repository"})
+    else
+      # Calculate CID for the record
+      record_cid = generate_cid(record_data)
+
+      case Repositories.get_record(did, collection, rkey) do
+        nil ->
+          # Create new record
+          record_attrs = %{
+            repository_did: did,
+            collection: collection,
+            rkey: rkey,
+            cid: record_cid,
+            value: record_data
+          }
+
+          case create_record_with_commit(did, record_attrs, "create") do
+            {:ok, {record, commit}} ->
+              json(conn, %{
+                uri: "at://#{did}/#{collection}/#{rkey}",
+                cid: record.cid,
+                commit: %{cid: commit.cid, rev: commit.rev}
+              })
+
+            {:error, reason} ->
+              conn
+              |> put_status(:bad_request)
+              |> json(%{error: "InvalidRequest", message: inspect(reason)})
+          end
+
+        %Record{} = existing_record ->
+          # Update existing record
+          update_attrs = %{
+            cid: record_cid,
+            value: record_data
+          }
+
+          case update_record_with_commit(did, existing_record, update_attrs) do
+            {:ok, {record, commit}} ->
+              json(conn, %{
+                uri: "at://#{did}/#{collection}/#{rkey}",
+                cid: record.cid,
+                commit: %{cid: commit.cid, rev: commit.rev}
+              })
+
+            {:error, reason} ->
+              conn
+              |> put_status(:bad_request)
+              |> json(%{error: "InvalidRequest", message: inspect(reason)})
+          end
+      end
+    end
+  end
+
+  @doc """
+  POST /xrpc/com.atproto.repo.deleteRecord
+  """
+  def delete_record(conn, %{"repo" => did, "collection" => collection, "rkey" => rkey}) do
+    current_did = conn.assigns[:current_did]
+
+    # Verify the user owns this repository
+    if did != current_did do
+      conn
+      |> put_status(:forbidden)
+      |> json(%{error: "Forbidden", message: "Cannot write to another user's repository"})
+    else
+      case Repositories.get_record(did, collection, rkey) do
+        nil ->
+          conn
+          |> put_status(:not_found)
+          |> json(%{error: "RecordNotFound", message: "Record not found"})
+
+        %Record{} = record ->
+          case delete_record_with_commit(did, record) do
+            {:ok, commit} ->
+              json(conn, %{
+                commit: %{
+                  cid: commit.cid,
+                  rev: commit.rev
+                }
+              })
+
+            {:error, reason} ->
+              conn
+              |> put_status(:bad_request)
+              |> json(%{error: "InvalidRequest", message: inspect(reason)})
+          end
+      end
     end
   end
 
@@ -231,13 +258,180 @@ defmodule AetherPDSServerWeb.RepoController do
     json(conn, response)
   end
 
+  @doc """
+  POST /xrpc/com.atproto.repo.applyWrites
+
+  Apply a batch of write operations (creates, updates, deletes) to a repository.
+  All operations are applied atomically.
+  """
+  def apply_writes(conn, %{"repo" => repo, "writes" => writes} = params) do
+    current_did = conn.assigns[:current_did]
+
+    # Verify the user owns this repository
+    if repo != current_did do
+      conn
+      |> put_status(:forbidden)
+      |> json(%{error: "Forbidden", message: "Cannot write to another user's repository"})
+    else
+      # Validate the repo exists
+      case Repositories.get_repository(repo) do
+        nil ->
+          conn
+          |> put_status(:not_found)
+          |> json(%{error: "RepoNotFound", message: "Repository not found"})
+
+        _repository ->
+          # Validate optional parameters
+          validate = Map.get(params, "validate", true)
+          swap_commit = Map.get(params, "swapCommit")
+
+          # Apply writes in a transaction
+          case apply_batch_writes(repo, writes, validate, swap_commit) do
+            {:ok, results} ->
+              json(conn, %{
+                results: results
+              })
+
+            {:error, reason} ->
+              conn
+              |> put_status(:bad_request)
+              |> json(%{error: "InvalidRequest", message: inspect(reason)})
+          end
+      end
+    end
+  end
+
+  # ============================================================================
+  # Batch Write Operations
+  # ============================================================================
+
+  # Apply batch writes atomically
+  defp apply_batch_writes(repo_did, writes, _validate, _swap_commit) do
+    AetherPDSServer.Repo.transaction(fn ->
+      Enum.map(writes, fn write ->
+        case write["$type"] do
+          "com.atproto.repo.applyWrites#create" ->
+            apply_create(repo_did, write)
+
+          "com.atproto.repo.applyWrites#update" ->
+            apply_update(repo_did, write)
+
+          "com.atproto.repo.applyWrites#delete" ->
+            apply_delete(repo_did, write)
+
+          unknown_type ->
+            AetherPDSServer.Repo.rollback({:unknown_write_type, unknown_type})
+        end
+      end)
+    end)
+  end
+
+  # Apply a create operation
+  defp apply_create(repo_did, write) do
+    collection = write["collection"]
+    rkey = write["rkey"] || generate_tid()
+    value = write["value"]
+
+    # Check if record already exists
+    if Repositories.record_exists?(repo_did, collection, rkey) do
+      %{
+        "$type" => "com.atproto.repo.applyWrites#createResult",
+        "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
+        "cid" => nil,
+        "validationStatus" => "invalid"
+      }
+    else
+      # Calculate CID
+      record_cid = generate_cid(value)
+
+      record_attrs = %{
+        repository_did: repo_did,
+        collection: collection,
+        rkey: rkey,
+        cid: record_cid,
+        value: value
+      }
+
+      case Repositories.create_record(record_attrs) do
+        {:ok, record} ->
+          %{
+            "$type" => "com.atproto.repo.applyWrites#createResult",
+            "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
+            "cid" => record.cid,
+            "validationStatus" => "valid"
+          }
+
+        {:error, _changeset} ->
+          AetherPDSServer.Repo.rollback(:create_failed)
+      end
+    end
+  end
+
+  # Apply an update operation
+  defp apply_update(repo_did, write) do
+    collection = write["collection"]
+    rkey = write["rkey"]
+    value = write["value"]
+
+    case Repositories.get_record(repo_did, collection, rkey) do
+      nil ->
+        %{
+          "$type" => "com.atproto.repo.applyWrites#updateResult",
+          "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
+          "cid" => nil,
+          "validationStatus" => "invalid"
+        }
+
+      existing_record ->
+        # Calculate new CID
+        new_cid = generate_cid(value)
+
+        case Repositories.update_record(existing_record, %{cid: new_cid, value: value}) do
+          {:ok, updated_record} ->
+            %{
+              "$type" => "com.atproto.repo.applyWrites#updateResult",
+              "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
+              "cid" => updated_record.cid,
+              "validationStatus" => "valid"
+            }
+
+          {:error, _changeset} ->
+            AetherPDSServer.Repo.rollback(:update_failed)
+        end
+    end
+  end
+
+  # Apply a delete operation
+  defp apply_delete(repo_did, write) do
+    collection = write["collection"]
+    rkey = write["rkey"]
+
+    case Repositories.get_record(repo_did, collection, rkey) do
+      nil ->
+        %{
+          "$type" => "com.atproto.repo.applyWrites#deleteResult",
+          "validationStatus" => "invalid"
+        }
+
+      record ->
+        case Repositories.delete_record(record) do
+          {:ok, _deleted} ->
+            %{
+              "$type" => "com.atproto.repo.applyWrites#deleteResult",
+              "validationStatus" => "valid"
+            }
+
+          {:error, _changeset} ->
+            AetherPDSServer.Repo.rollback(:delete_failed)
+        end
+    end
+  end
+
   # ============================================================================
   # Helper Functions for Commit Logic
   # ============================================================================
 
   defp create_record_with_commit(did, record_attrs, action) do
-    alias Aether.ATProto.{MST, Commit, CID}
-
     AetherPDSServer.Repo.transaction(fn ->
       # 1. Create the record
       {:ok, record} = Repositories.create_record(record_attrs)
@@ -315,8 +509,6 @@ defmodule AetherPDSServerWeb.RepoController do
   end
 
   defp update_record_with_commit(did, record, update_attrs) do
-    alias Aether.ATProto.{MST, Commit, CID}
-
     AetherPDSServer.Repo.transaction(fn ->
       {:ok, updated_record} = Repositories.update_record(record, update_attrs)
 
@@ -390,8 +582,6 @@ defmodule AetherPDSServerWeb.RepoController do
   end
 
   defp delete_record_with_commit(did, record) do
-    alias Aether.ATProto.{MST, Commit, CID}
-
     AetherPDSServer.Repo.transaction(fn ->
       # Load current MST and remove the record BEFORE deleting from DB
       repo = Repositories.get_repository!(did)
@@ -400,10 +590,11 @@ defmodule AetherPDSServerWeb.RepoController do
       # Delete record from MST
       mst_key = "#{record.collection}/#{record.rkey}"
 
-      updated_mst = case MST.delete(mst, mst_key) do
-        {:ok, updated} -> updated
-        {:error, :not_found} -> mst  # Key not in MST, use current MST
-      end
+      updated_mst =
+        case MST.delete(mst, mst_key) do
+          {:ok, updated} -> updated
+          {:error, :not_found} -> mst
+        end
 
       # Now delete from database
       {:ok, _deleted} = Repositories.delete_record(record)
@@ -475,7 +666,6 @@ defmodule AetherPDSServerWeb.RepoController do
     # Parse and validate it as a CID
     case CID.parse_cid(cid_string) do
       {:ok, cid} -> CID.cid_to_string(cid)
-      # Fallback to raw string
       {:error, _} -> cid_string
     end
   end
@@ -489,8 +679,6 @@ defmodule AetherPDSServerWeb.RepoController do
   # ============================================================================
 
   defp load_mst(did) do
-    alias Aether.ATProto.{MST, CID}
-
     # Get all records for this repository and rebuild MST
     records = Repositories.list_records(did, "*", limit: 10000)
 
@@ -502,8 +690,6 @@ defmodule AetherPDSServerWeb.RepoController do
         case CID.parse_cid(record.cid) do
           {:ok, record_cid} ->
             mst_key = "#{record.collection}/#{record.rkey}"
-
-            # MST.add always returns {:ok, updated_mst}, never returns error
             {:ok, updated_mst} = MST.add(acc_mst, mst_key, record_cid)
             updated_mst
 
@@ -516,8 +702,6 @@ defmodule AetherPDSServerWeb.RepoController do
   end
 
   defp store_mst(did, mst) do
-    alias Aether.ATProto.{CID}
-
     # Serialize MST to CBOR-like format
     mst_data = serialize_mst(mst)
 
@@ -540,8 +724,6 @@ defmodule AetherPDSServerWeb.RepoController do
   end
 
   defp serialize_mst(mst) do
-    alias Aether.ATProto.CID
-
     # Serialize MST entries to binary
     entries_data =
       Enum.map(mst.entries, fn entry ->

@@ -76,6 +76,7 @@ defmodule AetherPDSServerWeb.Router do
     post "/com.atproto.server.deleteSession", ServerController, :delete_session
 
     # Repository - Writes (must own the repo)
+    post "/com.atproto.repo.applyWrites", RepoController, :apply_writes
     post "/com.atproto.repo.createRecord", RepoController, :create_record
     post "/com.atproto.repo.putRecord", RepoController, :put_record
     post "/com.atproto.repo.deleteRecord", RepoController, :delete_record
