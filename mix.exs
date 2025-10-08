@@ -52,7 +52,7 @@ defmodule AetherPDSServer.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
-      {:aether_atproto, "~> 0.1.3"},
+      {:aether_atproto, "~> 0.1.4"},
       {:joken, "~> 2.6"},
       {:jose, "~> 1.11"},
       {:argon2_elixir, "~> 4.0"},
