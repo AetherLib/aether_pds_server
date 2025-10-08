@@ -389,7 +389,6 @@ defmodule AetherPDSServerWeb.RepoController do
     end)
   end
 
-  # Process create (without committing)
   defp process_create(repo_did, write, mst) do
     collection = write["collection"]
     rkey = write["rkey"] || generate_tid()
@@ -398,7 +397,6 @@ defmodule AetherPDSServerWeb.RepoController do
     # Check if record already exists
     if Repositories.record_exists?(repo_did, collection, rkey) do
       result = %{
-        "$type" => "com.atproto.repo.applyWrites#createResult",
         "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
         "cid" => nil,
         "validationStatus" => "invalid"
@@ -426,7 +424,6 @@ defmodule AetherPDSServerWeb.RepoController do
           {:ok, updated_mst} = MST.add(mst, mst_key, record_cid_parsed)
 
           result = %{
-            "$type" => "com.atproto.repo.applyWrites#createResult",
             "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
             "cid" => record.cid,
             "validationStatus" => "valid"
@@ -455,7 +452,6 @@ defmodule AetherPDSServerWeb.RepoController do
     case Repositories.get_record(repo_did, collection, rkey) do
       nil ->
         result = %{
-          "$type" => "com.atproto.repo.applyWrites#updateResult",
           "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
           "cid" => nil,
           "validationStatus" => "invalid"
@@ -475,7 +471,6 @@ defmodule AetherPDSServerWeb.RepoController do
             {:ok, updated_mst} = MST.add(mst, mst_key, record_cid_parsed)
 
             result = %{
-              "$type" => "com.atproto.repo.applyWrites#updateResult",
               "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
               "cid" => updated_record.cid,
               "validationStatus" => "valid"
@@ -503,7 +498,6 @@ defmodule AetherPDSServerWeb.RepoController do
     case Repositories.get_record(repo_did, collection, rkey) do
       nil ->
         result = %{
-          "$type" => "com.atproto.repo.applyWrites#deleteResult",
           "validationStatus" => "invalid"
         }
 
@@ -522,7 +516,6 @@ defmodule AetherPDSServerWeb.RepoController do
               end
 
             result = %{
-              "$type" => "com.atproto.repo.applyWrites#deleteResult",
               "validationStatus" => "valid"
             }
 
