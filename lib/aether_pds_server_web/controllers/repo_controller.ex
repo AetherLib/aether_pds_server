@@ -304,42 +304,106 @@ defmodule AetherPDSServerWeb.RepoController do
   # ============================================================================
   # Batch Write Operations
   # ============================================================================
-
-  # Apply batch writes atomically
   defp apply_batch_writes(repo_did, writes, _validate, _swap_commit) do
     AetherPDSServer.Repo.transaction(fn ->
-      Enum.map(writes, fn write ->
-        case write["$type"] do
-          "com.atproto.repo.applyWrites#create" ->
-            apply_create(repo_did, write)
+      # Load current repository and MST
+      repo = Repositories.get_repository!(repo_did)
+      {:ok, mst} = load_mst(repo_did)
 
-          "com.atproto.repo.applyWrites#update" ->
-            apply_update(repo_did, write)
+      # Track operations for the commit
+      ops = []
 
-          "com.atproto.repo.applyWrites#delete" ->
-            apply_delete(repo_did, write)
+      # Process each write and build results
+      {results, updated_mst, ops} =
+        Enum.reduce(writes, {[], mst, []}, fn write, {acc_results, acc_mst, acc_ops} ->
+          case write["$type"] do
+            "com.atproto.repo.applyWrites#create" ->
+              {result, new_mst, op} = process_create(repo_did, write, acc_mst)
+              {[result | acc_results], new_mst, [op | acc_ops]}
 
-          unknown_type ->
-            AetherPDSServer.Repo.rollback({:unknown_write_type, unknown_type})
+            "com.atproto.repo.applyWrites#update" ->
+              {result, new_mst, op} = process_update(repo_did, write, acc_mst)
+              {[result | acc_results], new_mst, [op | acc_ops]}
+
+            "com.atproto.repo.applyWrites#delete" ->
+              {result, new_mst, op} = process_delete(repo_did, write, acc_mst)
+              {[result | acc_results], new_mst, [op | acc_ops]}
+
+            unknown_type ->
+              AetherPDSServer.Repo.rollback({:unknown_write_type, unknown_type})
+          end
+        end)
+
+      # Create a single commit for all operations
+      mst_root_cid = store_mst(repo_did, updated_mst)
+      mst_root_cid_string = CID.cid_to_string(mst_root_cid)
+
+      rev = generate_tid()
+
+      prev_cid =
+        if repo.head_cid do
+          case CID.parse_cid(repo.head_cid) do
+            {:ok, cid} -> cid
+            _ -> nil
+          end
+        else
+          nil
         end
-      end)
+
+      commit = Commit.create(repo_did, mst_root_cid, rev: rev, prev: prev_cid)
+      commit_cid = Commit.cid(commit)
+      commit_cid_string = CID.cid_to_string(commit_cid)
+
+      commit_attrs = %{
+        repository_did: repo_did,
+        cid: commit_cid_string,
+        rev: rev,
+        prev: repo.head_cid,
+        data: %{
+          version: 3,
+          did: repo_did,
+          rev: rev,
+          data: mst_root_cid_string,
+          prev: repo.head_cid
+        }
+      }
+
+      {:ok, _commit_record} = Repositories.create_commit(commit_attrs)
+      {:ok, _repo} = Repositories.update_repository(repo, %{head_cid: commit_cid_string})
+
+      # Create event with all operations
+      event_attrs = %{
+        repository_did: repo_did,
+        commit_cid: commit_cid_string,
+        rev: rev,
+        ops: Enum.reverse(ops),
+        time: DateTime.utc_now()
+      }
+
+      {:ok, _event} = Repositories.create_event(event_attrs)
+
+      # Return results in correct order
+      Enum.reverse(results)
     end)
   end
 
-  # Apply a create operation
-  defp apply_create(repo_did, write) do
+  # Process create (without committing)
+  defp process_create(repo_did, write, mst) do
     collection = write["collection"]
     rkey = write["rkey"] || generate_tid()
     value = write["value"]
 
     # Check if record already exists
     if Repositories.record_exists?(repo_did, collection, rkey) do
-      %{
+      result = %{
         "$type" => "com.atproto.repo.applyWrites#createResult",
         "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
         "cid" => nil,
         "validationStatus" => "invalid"
       }
+
+      op = nil
+      {result, mst, op}
     else
       # Calculate CID
       record_cid = generate_cid(value)
@@ -354,12 +418,25 @@ defmodule AetherPDSServerWeb.RepoController do
 
       case Repositories.create_record(record_attrs) do
         {:ok, record} ->
-          %{
+          # Update MST
+          {:ok, record_cid_parsed} = CID.parse_cid(record.cid)
+          mst_key = "#{collection}/#{rkey}"
+          {:ok, updated_mst} = MST.add(mst, mst_key, record_cid_parsed)
+
+          result = %{
             "$type" => "com.atproto.repo.applyWrites#createResult",
             "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
             "cid" => record.cid,
             "validationStatus" => "valid"
           }
+
+          op = %{
+            action: "create",
+            path: "#{collection}/#{rkey}",
+            cid: record.cid
+          }
+
+          {result, updated_mst, op}
 
         {:error, _changeset} ->
           AetherPDSServer.Repo.rollback(:create_failed)
@@ -367,20 +444,22 @@ defmodule AetherPDSServerWeb.RepoController do
     end
   end
 
-  # Apply an update operation
-  defp apply_update(repo_did, write) do
+  # Process update (without committing)
+  defp process_update(repo_did, write, mst) do
     collection = write["collection"]
     rkey = write["rkey"]
     value = write["value"]
 
     case Repositories.get_record(repo_did, collection, rkey) do
       nil ->
-        %{
+        result = %{
           "$type" => "com.atproto.repo.applyWrites#updateResult",
           "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
           "cid" => nil,
           "validationStatus" => "invalid"
         }
+
+        {result, mst, nil}
 
       existing_record ->
         # Calculate new CID
@@ -388,12 +467,25 @@ defmodule AetherPDSServerWeb.RepoController do
 
         case Repositories.update_record(existing_record, %{cid: new_cid, value: value}) do
           {:ok, updated_record} ->
-            %{
+            # Update MST
+            {:ok, record_cid_parsed} = CID.parse_cid(updated_record.cid)
+            mst_key = "#{collection}/#{rkey}"
+            {:ok, updated_mst} = MST.add(mst, mst_key, record_cid_parsed)
+
+            result = %{
               "$type" => "com.atproto.repo.applyWrites#updateResult",
               "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
               "cid" => updated_record.cid,
               "validationStatus" => "valid"
             }
+
+            op = %{
+              action: "update",
+              path: "#{collection}/#{rkey}",
+              cid: updated_record.cid
+            }
+
+            {result, updated_mst, op}
 
           {:error, _changeset} ->
             AetherPDSServer.Repo.rollback(:update_failed)
@@ -401,25 +493,44 @@ defmodule AetherPDSServerWeb.RepoController do
     end
   end
 
-  # Apply a delete operation
-  defp apply_delete(repo_did, write) do
+  # Process delete (without committing)
+  defp process_delete(repo_did, write, mst) do
     collection = write["collection"]
     rkey = write["rkey"]
 
     case Repositories.get_record(repo_did, collection, rkey) do
       nil ->
-        %{
+        result = %{
           "$type" => "com.atproto.repo.applyWrites#deleteResult",
           "validationStatus" => "invalid"
         }
 
+        {result, mst, nil}
+
       record ->
         case Repositories.delete_record(record) do
           {:ok, _deleted} ->
-            %{
+            # Update MST
+            mst_key = "#{collection}/#{rkey}"
+
+            updated_mst =
+              case MST.delete(mst, mst_key) do
+                {:ok, updated} -> updated
+                {:error, :not_found} -> mst
+              end
+
+            result = %{
               "$type" => "com.atproto.repo.applyWrites#deleteResult",
               "validationStatus" => "valid"
             }
+
+            op = %{
+              action: "delete",
+              path: "#{collection}/#{rkey}",
+              cid: nil
+            }
+
+            {result, updated_mst, op}
 
           {:error, _changeset} ->
             AetherPDSServer.Repo.rollback(:delete_failed)
