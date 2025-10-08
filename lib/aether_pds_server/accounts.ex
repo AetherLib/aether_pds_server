@@ -188,38 +188,58 @@ defmodule AetherPDSServer.Accounts do
   use the OAuth module directly or implement session tokens separately.
   """
   def create_access_token(did) do
-    # Generate a dummy DPoP key for now
-    # In production, this would come from the OAuth flow
-    dummy_dpop_key = %{
-      "kty" => "EC",
-      "crv" => "P-256",
-      "x" => Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false),
-      "y" => Base.url_encode64(:crypto.strong_rand_bytes(32), padding: false)
-    }
-
-    OAuth.create_access_token(did, "atproto", dummy_dpop_key)
+    # Generate proper JWT instead of random token
+    case AetherPDSServer.Token.generate_access_token(did) do
+      {:ok, token, _claims} -> {:ok, token}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
   Create a refresh token for an account.
   """
+
+  # def create_refresh_token(did) do
+  #   # For simple auth, use "internal" as client_id
+  #   OAuth.create_refresh_token(did, "internal")
+  # end
+
   def create_refresh_token(did) do
-    # For simple auth, use "internal" as client_id
-    OAuth.create_refresh_token(did, "internal")
+    # Generate proper JWT instead of random token
+    case AetherPDSServer.Token.generate_refresh_token(did) do
+      {:ok, token, _claims} -> {:ok, token}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
   Refresh a session using a refresh token.
   """
+
+  # def refresh_session(refresh_token) do
+  #   case OAuth.validate_refresh_token(refresh_token, "internal") do
+  #     {:ok, refresh_token_data} ->
+  #       account = get_account_by_did!(refresh_token_data.did)
+  #       {:ok, new_access_token} = create_access_token(account.did)
+  #       {:ok, new_refresh_token} = create_refresh_token(account.did)
+
+  #       # Revoke old refresh token
+  #       OAuth.revoke_refresh_token(refresh_token)
+
+  #       {:ok, account, new_access_token, new_refresh_token}
+
+  #     {:error, _} ->
+  #       {:error, :invalid_token}
+  #   end
+  # end
+
   def refresh_session(refresh_token) do
-    case OAuth.validate_refresh_token(refresh_token, "internal") do
-      {:ok, refresh_token_data} ->
-        account = get_account_by_did!(refresh_token_data.did)
+    # Verify the JWT
+    case AetherPDSServer.Token.verify_token(refresh_token) do
+      {:ok, %{"sub" => did}} ->
+        account = get_account_by_did!(did)
         {:ok, new_access_token} = create_access_token(account.did)
         {:ok, new_refresh_token} = create_refresh_token(account.did)
-
-        # Revoke old refresh token
-        OAuth.revoke_refresh_token(refresh_token)
 
         {:ok, account, new_access_token, new_refresh_token}
 

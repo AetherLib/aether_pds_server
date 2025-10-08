@@ -30,6 +30,14 @@ if config_env() == :prod do
 
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
+  # config/runtime.exs
+  config :aether_pds_server,
+    token_secret:
+      System.get_env("TOKEN_SECRET") ||
+        raise("""
+        environment variable TOKEN_SECRET is missing.
+        """)
+
   config :aether_pds_server, AetherPDSServer.Repo,
     # ssl: true,
     url: database_url,
