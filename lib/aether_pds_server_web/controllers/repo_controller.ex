@@ -399,6 +399,7 @@ defmodule AetherPDSServerWeb.RepoController do
     # Check if record already exists
     if Repositories.record_exists?(repo_did, collection, rkey) do
       result = %{
+        "$type" => "com.atproto.repo.applyWrites#createResult",
         "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
         "cid" => nil,
         "validationStatus" => "invalid"
@@ -426,6 +427,7 @@ defmodule AetherPDSServerWeb.RepoController do
           {:ok, updated_mst} = MST.add(mst, mst_key, record_cid_parsed)
 
           result = %{
+            "$type" => "com.atproto.repo.applyWrites#createResult",
             "uri" => "at://#{repo_did}/#{collection}/#{rkey}",
             "cid" => record.cid,
             "validationStatus" => "valid"
