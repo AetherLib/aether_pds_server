@@ -36,6 +36,8 @@ defmodule AetherPDSServerWeb.Router do
   scope "/xrpc", AetherPDSServerWeb do
     pipe_through :api
 
+    get "/app.bsky.actor.getProfile", Bsky.ActorController, :get_profile
+
     # Server Description
     get "/com.atproto.server.describeServer", ServerController, :describe_server
 

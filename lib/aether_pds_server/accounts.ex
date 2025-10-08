@@ -13,7 +13,7 @@ defmodule AetherPDSServer.Accounts do
   # ============================================================================
 
   @doc """
-  Create a new account and its repository.
+  Create a new account, repository, and default profile.
   """
   def create_account(attrs) do
     # Generate a DID for the new account
@@ -25,23 +25,48 @@ defmodule AetherPDSServer.Accounts do
       |> Map.put(:password_hash, hash_password(attrs.password))
       |> Map.delete(:password)
 
-    # Create account and repository in a transaction
+    # Create account, repository, and profile in a transaction
     Repo.transaction(fn ->
-      # Create the account
-      case %Account{}
-           |> Account.changeset(account_attrs)
-           |> Repo.insert() do
-        {:ok, account} ->
-          # Create the repository
-          case create_repository_for_account(account) do
-            {:ok, _repository} -> account
-            {:error, reason} -> Repo.rollback(reason)
-          end
-
-        {:error, changeset} ->
-          Repo.rollback(changeset)
+      with {:ok, account} <-
+             %Account{}
+             |> Account.changeset(account_attrs)
+             |> Repo.insert(),
+           {:ok, _repository} <- create_repository_for_account(account),
+           {:ok, _profile} <- create_default_profile(account) do
+        account
+      else
+        {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  defp create_default_profile(account) do
+    profile_record = %{
+      "$type" => "app.bsky.actor.profile",
+      "displayName" => account.handle,
+      "description" => "",
+      "createdAt" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    # Generate CID for profile
+    profile_cid = generate_cid(profile_record)
+
+    record_attrs = %{
+      repository_did: account.did,
+      collection: "app.bsky.actor.profile",
+      rkey: "self",
+      cid: profile_cid,
+      value: profile_record
+    }
+
+    # Create the profile record (already in transaction)
+    Repositories.create_record(record_attrs)
+  end
+
+  defp generate_cid(data) do
+    hash = :crypto.hash(:sha256, Jason.encode!(data))
+    encoded = Base.encode32(hash, case: :lower, padding: false)
+    "bafyrei" <> String.slice(encoded, 0..50)
   end
 
   @doc """
