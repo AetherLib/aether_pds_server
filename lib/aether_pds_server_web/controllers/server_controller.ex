@@ -46,13 +46,14 @@ defmodule AetherPDSServerWeb.ServerController do
       # Create initial session tokens
       {:ok, access_token} = Accounts.create_access_token(account.did)
       {:ok, refresh_token} = Accounts.create_refresh_token(account.did)
+      did_doc = build_did_document(account.did, account.handle)
 
       response = %{
         accessJwt: access_token,
         refreshJwt: refresh_token,
         handle: account.handle,
         did: account.did,
-        didDoc: nil
+        didDoc: did_doc
       }
 
       json(conn, response)
@@ -87,17 +88,18 @@ defmodule AetherPDSServerWeb.ServerController do
   def create_session(conn, %{"identifier" => identifier, "password" => password} = params) do
     dbg(params)
 
-    case Accounts.authenticate(identifier, password) do
+    case Accounts.authenticate(identifier, password) |> dbg() do
       {:ok, account} ->
         {:ok, access_token} = Accounts.create_access_token(account.did)
         {:ok, refresh_token} = Accounts.create_refresh_token(account.did)
+        did_doc = build_did_document(account.did, account.handle)
 
         response = %{
           accessJwt: access_token,
           refreshJwt: refresh_token,
           handle: account.handle,
           did: account.did,
-          didDoc: nil
+          didDoc: did_doc
         }
 
         json(conn, response)
@@ -107,7 +109,6 @@ defmodule AetherPDSServerWeb.ServerController do
         |> put_status(:unauthorized)
         |> json(%{error: "AuthenticationFailed", message: "Invalid credentials"})
     end
-    |> dbg()
   end
 
   @doc """
@@ -121,12 +122,14 @@ defmodule AetherPDSServerWeb.ServerController do
       ["Bearer " <> refresh_token] ->
         case Accounts.refresh_session(refresh_token) do
           {:ok, account, new_access_token, new_refresh_token} ->
+            did_doc = build_did_document(account.did, account.handle)
+
             response = %{
               accessJwt: new_access_token,
               refreshJwt: new_refresh_token,
               handle: account.handle,
               did: account.did,
-              didDoc: nil
+              didDoc: did_doc
             }
 
             json(conn, response)
@@ -151,6 +154,7 @@ defmodule AetherPDSServerWeb.ServerController do
   """
   def get_session(conn, _params) do
     did = conn.assigns[:current_did]
+    did_doc = build_did_document(account.did, account.handle)
 
     case Accounts.get_account_by_did(did) do
       nil ->
@@ -162,7 +166,7 @@ defmodule AetherPDSServerWeb.ServerController do
         response = %{
           handle: account.handle,
           did: account.did,
-          didDoc: nil,
+          didDoc: did_doc,
           email: account.email
         }
 
@@ -200,6 +204,29 @@ defmodule AetherPDSServerWeb.ServerController do
     else
       {:error, :missing_params}
     end
+  end
+
+  # Add this helper function
+  defp build_did_document(did, handle) do
+    pds_url = AetherPDSServerWeb.Endpoint.url()
+
+    %{
+      "@context" => [
+        "https://www.w3.org/ns/did/v1",
+        "https://w3id.org/security/multikey/v1",
+        "https://w3id.org/security/suites/secp256k1-2019/v1"
+      ],
+      "id" => did,
+      "alsoKnownAs" => ["at://#{handle}"],
+      "verificationMethod" => [],
+      "service" => [
+        %{
+          "id" => "#atproto_pds",
+          "type" => "AtprotoPersonalDataServer",
+          "serviceEndpoint" => pds_url
+        }
+      ]
+    }
   end
 
   defp format_errors(changeset) do
