@@ -11,12 +11,25 @@ defmodule AetherPDSServerWeb.ServerController do
   """
   def describe_server(conn, _params) do
     response = %{
-      availableUserDomains: [".bsky.social"],
+      # Users on this PDS will have handles like: alice.pds.aetherlib.org
+      availableUserDomains: ["pds.aetherlib.org"],
+
+      # Set to true if you want invite-only registration
       inviteCodeRequired: false,
+
+      # Your PDS details
       links: %{
-        privacyPolicy: "https://example.com/privacy",
-        termsOfService: "https://example.com/terms"
-      }
+        privacyPolicy: "https://pds.aetherlib.org/privacy",
+        termsOfService: "https://pds.aetherlib.org/terms"
+      },
+
+      # Optional: Contact information
+      contact: %{
+        email: "hello@fullstack.ing"
+      },
+
+      # DID of the server itself (optional but recommended)
+      did: "did:web:pds.aetherlib.org"
     }
 
     json(conn, response)
