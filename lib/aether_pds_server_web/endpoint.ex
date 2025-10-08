@@ -26,6 +26,14 @@ defmodule AetherPDSServerWeb.Endpoint do
     gzip: not code_reloading?,
     only: AetherPDSServerWeb.static_paths()
 
+  # Handle CORS - ADD THIS
+  plug Corsica,
+    origins: "*",
+    allow_headers: ["authorization", "content-type", "dpop", "atproto-accept-labelers"],
+    allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_credentials: true,
+    max_age: 600
+
   # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.
   if code_reloading? do
