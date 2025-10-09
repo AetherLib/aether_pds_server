@@ -1296,7 +1296,9 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
           did: account.did,
           handle: account.handle,
           displayName: profile["displayName"],
-          avatar: profile["avatar"]
+          avatar: profile["avatar"],
+          viewer: build_author_viewer_state(current_did, did),
+          labels: []
         }
 
         # Add createdAt if available from account
@@ -1312,48 +1314,16 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
             profile_map
           end
 
-        # Add associated field (activity subscription and chat)
-        profile_map =
-          Map.put(profile_map, :associated, %{
-            activitySubscription: %{
-              allowSubscriptions: false
-            }
-          })
-
-        # Add verification field (stubbed for now - would query verification records)
-        # Real implementation would check for verified domain/handle
-        profile_map = Map.put(profile_map, :verification, build_verification_status(did))
-
-        # Add viewer state
-        profile_map =
-          Map.put(profile_map, :viewer, build_author_viewer_state(current_did, did))
-
-        # Add labels
-        profile_map = Map.put(profile_map, :labels, [])
-
-        # Remove nil values except for viewer, labels, associated, and verification
+        # Remove nil values except for $type, viewer, and labels
         profile_map
         |> Enum.reject(fn
           {:"$type", _} -> false
           {:viewer, _} -> false
           {:labels, _} -> false
-          {:associated, _} -> false
-          {:verification, _} -> false
           {_k, v} -> is_nil(v)
         end)
         |> Map.new()
     end
-  end
-
-  # Build verification status for an account
-  defp build_verification_status(_did) do
-    # TODO: Implement actual verification checking
-    # For now, return basic unverified status
-    %{
-      verifications: [],
-      verifiedStatus: "none",
-      trustedVerifierStatus: "none"
-    }
   end
 
   # Build viewer state for author profile
