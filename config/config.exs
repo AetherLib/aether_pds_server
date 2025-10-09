@@ -16,7 +16,8 @@ config :aether_pds_server,
     receive_timeout: 10_000,
     retry: :transient,
     max_retries: 2
-  ]
+  ],
+  token_secret: "KbSrjDeIdO7nMaUP27F47c4Hd10j8zGqEa9C7qDmquocqy6BD0JMTT0RE9GoLbbf"
 
 # Configures the endpoint
 config :aether_pds_server, AetherPDSServerWeb.Endpoint,
