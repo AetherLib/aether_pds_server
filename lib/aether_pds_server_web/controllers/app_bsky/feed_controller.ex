@@ -11,6 +11,8 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
   - feed: AT URI of the feed generator (required)
   """
   def describe_feed_generator(conn, %{"feed" => feed_uri} = _params) do
+    current_did = conn.assigns[:current_did]
+
     # Parse the feed URI to get the DID and rkey
     case parse_at_uri(feed_uri) do
       {:ok, {did, "app.bsky.feed.generator", rkey}} ->
@@ -23,7 +25,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
           record ->
             # Get the creator's profile
-            creator = get_author_profile(did)
+            creator = get_author_profile(did, current_did)
 
             response = %{
               uri: feed_uri,
@@ -72,6 +74,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
   - cursor: Pagination cursor
   """
   def get_actor_feeds(conn, %{"actor" => actor} = params) do
+    current_did = conn.assigns[:current_did]
     limit = Map.get(params, "limit", "50") |> parse_integer(50) |> min(100)
     cursor = Map.get(params, "cursor")
 
@@ -110,7 +113,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
           generators_to_return
           |> Enum.map(fn record ->
             uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
-            creator = get_author_profile(record.repository_did)
+            creator = get_author_profile(record.repository_did, current_did)
 
             feed_view = %{
               uri: uri,
@@ -201,7 +204,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
               {:ok, {repo_did, collection, rkey}} ->
                 case Repositories.get_record(repo_did, collection, rkey) do
                   nil -> nil
-                  post_record -> build_feed_view_post(post_record, repo_did)
+                  post_record -> build_feed_view_post(post_record, repo_did, current_did)
                 end
 
               _ ->
@@ -234,6 +237,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
   - filter: Filter for posts (posts_with_replies, posts_no_replies, posts_with_media, posts_and_author_threads)
   """
   def get_author_feed(conn, %{"actor" => actor} = params) do
+    current_did = conn.assigns[:current_did]
     limit = Map.get(params, "limit", "50") |> parse_integer(50) |> min(100)
     cursor = Map.get(params, "cursor")
     filter = Map.get(params, "filter", "posts_with_replies")
@@ -246,7 +250,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
       account ->
         # Get posts from the author
-        {feed_items, next_cursor} = get_author_posts(account.did, limit, cursor, filter)
+        {feed_items, next_cursor} = get_author_posts(account.did, limit, cursor, filter, current_did)
 
         response = %{feed: feed_items}
         response = if next_cursor, do: Map.put(response, :cursor, next_cursor), else: response
@@ -296,6 +300,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
   - cursor: Pagination cursor
   """
   def get_likes(conn, %{"uri" => uri} = params) do
+    current_did = conn.assigns[:current_did]
     limit = Map.get(params, "limit", "50") |> parse_integer(50) |> min(100)
     cursor = Map.get(params, "cursor")
 
@@ -316,7 +321,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
               %{
                 indexedAt: format_timestamp(DateTime.utc_now()),
                 createdAt: Map.get(record.value, "createdAt", format_timestamp(DateTime.utc_now())),
-                actor: get_author_profile(account.did)
+                actor: get_author_profile(account.did, current_did)
               }
             end)
 
@@ -470,6 +475,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
   - cursor: Pagination cursor
   """
   def get_reposted_by(conn, %{"uri" => uri} = params) do
+    current_did = conn.assigns[:current_did]
     limit = Map.get(params, "limit", "50") |> parse_integer(50) |> min(100)
     cursor = Map.get(params, "cursor")
 
@@ -490,7 +496,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
               %{
                 indexedAt: format_timestamp(DateTime.utc_now()),
                 createdAt: Map.get(record.value, "createdAt", format_timestamp(DateTime.utc_now())),
-                actor: get_author_profile(account.did)
+                actor: get_author_profile(account.did, current_did)
               }
             end)
 
@@ -883,7 +889,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     post = build_post_view(original_post, current_did)
 
     # Build reason (who reposted it)
-    reposter = get_author_profile(repost_record.repository_did)
+    reposter = get_author_profile(repost_record.repository_did, current_did)
 
     reason = %{
       "$type" => "app.bsky.feed.defs#reasonRepost",
@@ -912,12 +918,12 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
   end
 
   # Build reply context (root, parent, grandparentAuthor)
-  defp build_reply_context(reply_ref, _current_did) do
+  defp build_reply_context(reply_ref, current_did) do
     root_uri = get_in(reply_ref, ["root", "uri"])
     parent_uri = get_in(reply_ref, ["parent", "uri"])
 
-    root = fetch_post_view_from_uri(root_uri)
-    parent = fetch_post_view_from_uri(parent_uri)
+    root = fetch_post_view_from_uri(root_uri, current_did)
+    parent = fetch_post_view_from_uri(parent_uri, current_did)
 
     # Determine grandparentAuthor
     grandparent_author =
@@ -928,7 +934,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
           grandparent_parent_uri = get_in(grandparent_reply, ["parent", "uri"])
 
           case parse_at_uri(grandparent_parent_uri) do
-            {:ok, {repo_did, _, _}} -> get_author_profile(repo_did)
+            {:ok, {repo_did, _, _}} -> get_author_profile(repo_did, current_did)
             _ -> nil
           end
         else
@@ -960,12 +966,12 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
   end
 
   # Fetch post view from AT URI
-  defp fetch_post_view_from_uri(uri) when is_binary(uri) do
+  defp fetch_post_view_from_uri(uri, current_did \\ nil) when is_binary(uri) do
     case parse_at_uri(uri) do
       {:ok, {repo_did, collection, rkey}} ->
         case Repositories.get_record(repo_did, collection, rkey) do
           nil -> nil
-          record -> build_post_view_simple(record)
+          record -> build_post_view_simple(record, current_did)
         end
 
       _ ->
@@ -973,15 +979,18 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     end
   end
 
-  defp fetch_post_view_from_uri(_), do: nil
+  defp fetch_post_view_from_uri(_, _), do: nil
 
   # Build simple post view (for reply context)
-  defp build_post_view_simple(record) do
-    author = get_author_profile(record.repository_did)
+  defp build_post_view_simple(record, current_did \\ nil) do
+    author = get_author_profile(record.repository_did, current_did)
     uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
 
     # Get engagement counts
     {reply_count, repost_count, like_count, quote_count} = get_post_engagement_counts(uri)
+
+    # Build viewer state for this post
+    viewer = build_post_viewer_state(current_did, uri)
 
     %{
       "$type" => "app.bsky.feed.defs#postView",
@@ -995,22 +1004,21 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
       quoteCount: quote_count,
       bookmarkCount: 0,
       indexedAt: format_timestamp(DateTime.utc_now()),
-      viewer: %{
-        bookmarked: false,
-        threadMuted: false,
-        embeddingDisabled: false
-      },
+      viewer: viewer,
       labels: []
     }
   end
 
   # Build full post view
-  defp build_post_view(record, _current_did) do
-    author = get_author_profile(record.repository_did)
+  defp build_post_view(record, current_did) do
+    author = get_author_profile(record.repository_did, current_did)
     uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
 
     # Get engagement counts
     {reply_count, repost_count, like_count, quote_count} = get_post_engagement_counts(uri)
+
+    # Build viewer state for this post
+    viewer = build_post_viewer_state(current_did, uri)
 
     %{
       "$type" => "app.bsky.feed.defs#postView",
@@ -1024,13 +1032,75 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
       quoteCount: quote_count,
       bookmarkCount: 0,
       indexedAt: format_timestamp(DateTime.utc_now()),
-      viewer: %{
-        bookmarked: false,
-        threadMuted: false,
-        embeddingDisabled: false
-      },
+      viewer: viewer,
       labels: []
     }
+  end
+
+  # Build viewer state for a post
+  defp build_post_viewer_state(nil, _post_uri) do
+    %{
+      bookmarked: false,
+      threadMuted: false,
+      embeddingDisabled: false
+    }
+  end
+
+  defp build_post_viewer_state(current_did, post_uri) do
+    # Check if user has liked this post
+    like_uri = check_if_liked(current_did, post_uri)
+
+    # Check if user has reposted this post
+    repost_uri = check_if_reposted(current_did, post_uri)
+
+    viewer = %{
+      bookmarked: false,
+      threadMuted: false,
+      embeddingDisabled: false
+    }
+
+    viewer = if like_uri, do: Map.put(viewer, :like, like_uri), else: viewer
+    viewer = if repost_uri, do: Map.put(viewer, :repost, repost_uri), else: viewer
+
+    viewer
+  end
+
+  # Check if user has liked a post, return like record URI if found
+  defp check_if_liked(user_did, post_uri) do
+    case Repositories.list_records(user_did, "app.bsky.feed.like", limit: 1000) do
+      %{records: records} ->
+        records
+        |> Enum.find(fn record ->
+          subject_uri = get_in(record.value, ["subject", "uri"])
+          subject_uri == post_uri
+        end)
+        |> case do
+          nil -> nil
+          record -> "at://#{record.repository_did}/app.bsky.feed.like/#{record.rkey}"
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  # Check if user has reposted a post, return repost record URI if found
+  defp check_if_reposted(user_did, post_uri) do
+    case Repositories.list_records(user_did, "app.bsky.feed.repost", limit: 1000) do
+      %{records: records} ->
+        records
+        |> Enum.find(fn record ->
+          subject_uri = get_in(record.value, ["subject", "uri"])
+          subject_uri == post_uri
+        end)
+        |> case do
+          nil -> nil
+          record -> "at://#{record.repository_did}/app.bsky.feed.repost/#{record.rkey}"
+        end
+
+      _ ->
+        nil
+    end
   end
 
   # Parse AT URI format: at://did:plc:xxx/app.bsky.feed.post/xxx
@@ -1045,7 +1115,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
   end
 
   # Get author posts with pagination
-  defp get_author_posts(did, limit, cursor, filter) do
+  defp get_author_posts(did, limit, cursor, filter, current_did \\ nil) do
     # Get all posts from the author
     result =
       Repositories.list_records(did, "app.bsky.feed.post", limit: limit + 1, cursor: cursor)
@@ -1071,7 +1141,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
     feed_items =
       posts_to_return
-      |> Enum.map(&build_feed_view_post(&1, did))
+      |> Enum.map(&build_feed_view_post(&1, did, current_did))
 
     {feed_items, next_cursor}
   end
@@ -1112,12 +1182,15 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
   end
 
   # Build feed view post
-  defp build_feed_view_post(record, author_did) do
-    author = get_author_profile(author_did)
+  defp build_feed_view_post(record, author_did, current_did \\ nil) do
+    author = get_author_profile(author_did, current_did)
     uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
 
     # Get engagement counts
     {reply_count, repost_count, like_count, quote_count} = get_post_engagement_counts(uri)
+
+    # Build viewer state for this post
+    viewer = build_post_viewer_state(current_did, uri)
 
     post = %{
       "$type" => "app.bsky.feed.defs#postView",
@@ -1131,42 +1204,204 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
       quoteCount: quote_count,
       bookmarkCount: 0,
       indexedAt: format_timestamp(DateTime.utc_now()),
-      viewer: %{
-        bookmarked: false,
-        threadMuted: false,
-        embeddingDisabled: false
-      },
+      viewer: viewer,
       labels: []
     }
 
-    %{
+    # Check if post needs threadgate
+    post = maybe_add_threadgate(post, record)
+
+    feed_item = %{
       "$type" => "app.bsky.feed.defs#feedViewPost",
       post: post
     }
+
+    # Add reply context if this post is a reply
+    feed_item =
+      if Map.has_key?(record.value, "reply") do
+        case build_reply_context_for_feed(record.value["reply"], current_did) do
+          nil -> feed_item
+          reply_context -> Map.put(feed_item, :reply, reply_context)
+        end
+      else
+        feed_item
+      end
+
+    feed_item
   end
 
-  # Get author profile
-  defp get_author_profile(did) do
+  # Build reply context for feed items (simpler than thread context)
+  defp build_reply_context_for_feed(reply_ref, current_did) do
+    root_uri = get_in(reply_ref, ["root", "uri"])
+    parent_uri = get_in(reply_ref, ["parent", "uri"])
+
+    # Fetch root and parent post views
+    root = fetch_post_view_from_uri(root_uri, current_did)
+    parent = fetch_post_view_from_uri(parent_uri, current_did)
+
+    if root || parent do
+      reply_context = %{}
+      reply_context = if root, do: Map.put(reply_context, :root, root), else: reply_context
+      reply_context = if parent, do: Map.put(reply_context, :parent, parent), else: reply_context
+      reply_context
+    else
+      nil
+    end
+  end
+
+  # Maybe add threadgate to post if it exists
+  defp maybe_add_threadgate(post, record) do
+    # Check if there's a threadgate record for this post
+    case Repositories.get_record(
+           record.repository_did,
+           "app.bsky.feed.threadgate",
+           record.rkey
+         ) do
+      nil ->
+        post
+
+      threadgate_record ->
+        threadgate = %{
+          uri: "at://#{threadgate_record.repository_did}/#{threadgate_record.collection}/#{threadgate_record.rkey}",
+          cid: threadgate_record.cid,
+          record: threadgate_record.value,
+          lists: []
+        }
+
+        Map.put(post, :threadgate, threadgate)
+    end
+  end
+
+  # Get author profile with enhanced fields
+  defp get_author_profile(did, current_did \\ nil) do
     case Accounts.get_account_by_did(did) do
       nil ->
         %{
           "$type" => "app.bsky.actor.defs#profileViewBasic",
           did: did,
-          handle: "unknown.handle"
+          handle: "unknown.handle",
+          viewer: %{
+            muted: false,
+            blockedBy: false
+          },
+          labels: []
         }
 
       account ->
         profile = get_profile_record(did)
 
-        %{
+        # Build base profile
+        profile_map = %{
           "$type" => "app.bsky.actor.defs#profileViewBasic",
           did: account.did,
           handle: account.handle,
           displayName: profile["displayName"],
           avatar: profile["avatar"]
         }
-        |> Enum.reject(fn {k, v} -> k != :"$type" && is_nil(v) end)
+
+        # Add createdAt if available from account
+        profile_map =
+          if account.inserted_at do
+            created_at =
+              account.inserted_at
+              |> DateTime.from_naive!("Etc/UTC")
+              |> format_timestamp()
+
+            Map.put(profile_map, :createdAt, created_at)
+          else
+            profile_map
+          end
+
+        # Add associated field (activity subscription and chat)
+        profile_map =
+          Map.put(profile_map, :associated, %{
+            activitySubscription: %{
+              allowSubscriptions: false
+            }
+          })
+
+        # Add verification field (stubbed for now - would query verification records)
+        # Real implementation would check for verified domain/handle
+        profile_map = Map.put(profile_map, :verification, build_verification_status(did))
+
+        # Add viewer state
+        profile_map =
+          Map.put(profile_map, :viewer, build_author_viewer_state(current_did, did))
+
+        # Add labels
+        profile_map = Map.put(profile_map, :labels, [])
+
+        # Remove nil values except for viewer, labels, associated, and verification
+        profile_map
+        |> Enum.reject(fn
+          {:"$type", _} -> false
+          {:viewer, _} -> false
+          {:labels, _} -> false
+          {:associated, _} -> false
+          {:verification, _} -> false
+          {_k, v} -> is_nil(v)
+        end)
         |> Map.new()
+    end
+  end
+
+  # Build verification status for an account
+  defp build_verification_status(_did) do
+    # TODO: Implement actual verification checking
+    # For now, return basic unverified status
+    %{
+      verifications: [],
+      verifiedStatus: "none",
+      trustedVerifierStatus: "none"
+    }
+  end
+
+  # Build viewer state for author profile
+  defp build_author_viewer_state(nil, _profile_did) do
+    %{
+      muted: false,
+      blockedBy: false
+    }
+  end
+
+  defp build_author_viewer_state(current_did, profile_did) when current_did == profile_did do
+    %{
+      muted: false,
+      blockedBy: false
+    }
+  end
+
+  defp build_author_viewer_state(current_did, profile_did) do
+    # Check if current user follows this profile
+    following_uri = check_if_following(current_did, profile_did)
+    followed_by_uri = check_if_following(profile_did, current_did)
+
+    viewer = %{
+      muted: false,
+      blockedBy: false
+    }
+
+    viewer = if following_uri, do: Map.put(viewer, :following, following_uri), else: viewer
+    viewer = if followed_by_uri, do: Map.put(viewer, :followedBy, followed_by_uri), else: viewer
+
+    viewer
+  end
+
+  # Check if follower_did follows subject_did, return follow record URI if found
+  defp check_if_following(follower_did, subject_did) do
+    case Repositories.list_records(follower_did, "app.bsky.graph.follow", limit: 1000) do
+      %{records: records} ->
+        records
+        |> Enum.find(fn record ->
+          record.value["subject"] == subject_did
+        end)
+        |> case do
+          nil -> nil
+          record -> "at://#{record.repository_did}/app.bsky.graph.follow/#{record.rkey}"
+        end
+
+      _ ->
+        nil
     end
   end
 
