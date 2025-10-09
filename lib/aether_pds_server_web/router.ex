@@ -52,6 +52,9 @@ defmodule AetherPDSServerWeb.Router do
     get "/app.bsky.actor.searchActorsTypeahead", AppBsky.ActorController, :search_actors_typeahead
     get "/app.bsky.actor.getSuggestions", AppBsky.ActorController, :get_suggestions
 
+    # App Bsky Labeler - Public
+    get "/app.bsky.labeler.getServices", AppBsky.LabelerController, :get_services
+
     # App Bsky Feed - Public
     get "/app.bsky.feed.getActorFeeds", AppBsky.FeedController, :get_actor_feeds
     get "/app.bsky.feed.getActorLikes", AppBsky.FeedController, :get_actor_likes
