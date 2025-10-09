@@ -285,8 +285,85 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
   @doc """
   GET /xrpc/app.bsky.feed.getFeed
+
+  Get a hydrated feed from a feed generator.
+  Parameters:
+  - feed: AT URI of the feed generator (required)
+  - limit: Number of items to return (default: 50, max: 100)
+  - cursor: Pagination cursor
   """
-  def get_feed(conn, _) do
+  def get_feed(conn, %{"feed" => feed_uri} = params) do
+    current_did = conn.assigns[:current_did]
+    limit = Map.get(params, "limit", "50") |> parse_integer(50) |> min(100)
+    cursor = Map.get(params, "cursor")
+
+    # For now, we'll return a simple implementation that shows recent posts
+    # A full implementation would actually execute the feed generator's algorithm
+    case parse_at_uri(feed_uri) do
+      {:ok, {_did, "app.bsky.feed.generator", _rkey}} ->
+        # Get recent posts from all users
+        accounts = Accounts.list_accounts()
+
+        posts =
+          accounts
+          |> Enum.flat_map(fn account ->
+            case Repositories.list_records(account.did, "app.bsky.feed.post", limit: 100) do
+              %{records: records} -> Enum.map(records, fn r -> {get_post_timestamp(r), r} end)
+              _ -> []
+            end
+          end)
+          |> Enum.sort_by(fn {ts, _} -> ts end, {:desc, DateTime})
+
+        # Apply cursor if present
+        posts =
+          if cursor do
+            case DateTime.from_iso8601(cursor) do
+              {:ok, cursor_dt, _} ->
+                Enum.drop_while(posts, fn {ts, _} ->
+                  DateTime.compare(ts, cursor_dt) != :lt
+                end)
+
+              _ ->
+                posts
+            end
+          else
+            posts
+          end
+
+        # Paginate
+        posts_to_return = Enum.take(posts, limit)
+
+        next_cursor =
+          if length(posts) > limit do
+            {last_ts, _} = List.last(posts_to_return)
+            format_timestamp(last_ts)
+          else
+            nil
+          end
+
+        # Build feed items
+        feed_items =
+          posts_to_return
+          |> Enum.map(fn {_ts, record} ->
+            build_feed_view_post(record, record.repository_did, current_did)
+          end)
+
+        response = %{feed: feed_items}
+        response = if next_cursor, do: Map.put(response, :cursor, next_cursor), else: response
+
+        json(conn, response)
+
+      _ ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "InvalidRequest", message: "Invalid feed URI format"})
+    end
+  end
+
+  def get_feed(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "InvalidRequest", message: "Missing required parameter: feed"})
   end
 
   @doc """

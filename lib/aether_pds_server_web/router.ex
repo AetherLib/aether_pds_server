@@ -53,7 +53,23 @@ defmodule AetherPDSServerWeb.Router do
     get "/app.bsky.actor.getSuggestions", AppBsky.ActorController, :get_suggestions
 
     # App Bsky Feed - Public
+    get "/app.bsky.feed.getActorFeeds", AppBsky.FeedController, :get_actor_feeds
+    get "/app.bsky.feed.getActorLikes", AppBsky.FeedController, :get_actor_likes
     get "/app.bsky.feed.getAuthorFeed", AppBsky.FeedController, :get_author_feed
+    get "/app.bsky.feed.describeFeedGenerator", AppBsky.FeedController, :describe_feed_generator
+    get "/app.bsky.feed.getFeed", AppBsky.FeedController, :get_feed
+    get "/app.bsky.feed.getFeedGenerator", AppBsky.FeedController, :get_feed_generator
+    get "/app.bsky.feed.getFeedGenerators", AppBsky.FeedController, :get_feed_generators
+    get "/app.bsky.feed.getFeedSkeleton", AppBsky.FeedController, :get_feed_skeleton
+    get "/app.bsky.feed.getLikes", AppBsky.FeedController, :get_likes
+    get "/app.bsky.feed.getListFeed", AppBsky.FeedController, :get_list_feed
+    get "/app.bsky.feed.getPosts", AppBsky.FeedController, :get_posts
+    get "/app.bsky.feed.getPostThread", AppBsky.FeedController, :get_post_thread
+    get "/app.bsky.feed.getQuotes", AppBsky.FeedController, :get_quotes
+    get "/app.bsky.feed.getRepostedBy", AppBsky.FeedController, :get_reposted_by
+    get "/app.bsky.feed.getSuggestedFeeds", AppBsky.FeedController, :get_suggested_feeds
+    get "/app.bsky.feed.searchPosts", AppBsky.FeedController, :search_posts
+    post "/app.bsky.feed.sendInteractions", AppBsky.FeedController, :send_interactions
 
     # App Bsky Unspecced - Public
     get "/app.bsky.unspecced.getConfig", AppBsky.UnspeccedController, :get_config
