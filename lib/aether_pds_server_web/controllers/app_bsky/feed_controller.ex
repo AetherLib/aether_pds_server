@@ -332,7 +332,10 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
   defp build_timeline_feed_item({:post, record}, current_did) do
     post = build_post_view(record, current_did)
 
-    feed_item = %{post: post}
+    feed_item = %{
+      "$type" => "app.bsky.feed.defs#feedViewPost",
+      post: post
+    }
 
     # Add reply context if this post is a reply
     feed_item =
@@ -361,6 +364,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     }
 
     feed_item = %{
+      "$type" => "app.bsky.feed.defs#feedViewPost",
       post: post,
       reason: reason
     }
@@ -449,6 +453,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
 
     %{
+      "$type" => "app.bsky.feed.defs#postView",
       uri: uri,
       cid: record.cid,
       author: author,
@@ -565,6 +570,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
 
     post = %{
+      "$type" => "app.bsky.feed.defs#postView",
       uri: uri,
       cid: record.cid,
       author: author,
@@ -576,6 +582,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     }
 
     %{
+      "$type" => "app.bsky.feed.defs#feedViewPost",
       post: post
     }
   end
@@ -585,6 +592,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     case Accounts.get_account_by_did(did) do
       nil ->
         %{
+          "$type" => "app.bsky.actor.defs#profileViewBasic",
           did: did,
           handle: "unknown.handle"
         }
@@ -593,12 +601,13 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
         profile = get_profile_record(did)
 
         %{
+          "$type" => "app.bsky.actor.defs#profileViewBasic",
           did: account.did,
           handle: account.handle,
           displayName: profile["displayName"],
           avatar: profile["avatar"]
         }
-        |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+        |> Enum.reject(fn {k, v} -> k != :"$type" && is_nil(v) end)
         |> Map.new()
     end
   end
