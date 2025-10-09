@@ -1,4 +1,4 @@
-defmodule AetherPdsServerWeb.ChatBsky.ConvoController do
+defmodule AetherPDSServerWeb.ChatBsky.ConvoController do
   use AetherPDSServerWeb, :controller
 
   @doc """

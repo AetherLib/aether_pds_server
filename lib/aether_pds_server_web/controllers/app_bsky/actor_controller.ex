@@ -107,6 +107,18 @@ defmodule AetherPDSServerWeb.AppBsky.ActorController do
     json(conn, %{profiles: profiles})
   end
 
+  # Handle single actor (when Phoenix doesn't parse as list)
+  def get_profiles(conn, %{"actors" => actor}) when is_binary(actor) do
+    get_profiles(conn, %{"actors" => [actor]})
+  end
+
+  # Handle missing actors parameter
+  def get_profiles(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "InvalidRequest", message: "Missing required parameter: actors"})
+  end
+
   @doc """
   GET /xrpc/app.bsky.actor.getSuggestions
 

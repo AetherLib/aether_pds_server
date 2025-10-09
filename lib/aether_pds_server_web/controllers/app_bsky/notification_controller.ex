@@ -1,4 +1,4 @@
-defmodule AetherPdsServerWeb.AppBsky.NotificationController do
+defmodule AetherPDSServerWeb.AppBsky.NotificationController do
   use AetherPDSServerWeb, :controller
 
   @doc """

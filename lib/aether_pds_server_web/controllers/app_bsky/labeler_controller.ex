@@ -1,4 +1,4 @@
-defmodule AetherPdsServerWeb.AppBsky.LabelerController do
+defmodule AetherPDSServerWeb.AppBsky.LabelerController do
   use AetherPDSServerWeb, :controller
 
   @doc """

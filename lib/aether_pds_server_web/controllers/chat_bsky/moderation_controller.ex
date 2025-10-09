@@ -1,4 +1,4 @@
-defmodule AetherPdsServerWeb.ChatBsky.ModerationController do
+defmodule AetherPDSServerWeb.ChatBsky.ModerationController do
   use AetherPDSServerWeb, :controller
 
   def get_actor_metadata do

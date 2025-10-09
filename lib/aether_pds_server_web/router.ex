@@ -52,6 +52,13 @@ defmodule AetherPDSServerWeb.Router do
     get "/app.bsky.actor.searchActorsTypeahead", AppBsky.ActorController, :search_actors_typeahead
     get "/app.bsky.actor.getSuggestions", AppBsky.ActorController, :get_suggestions
 
+    # App Bsky Feed - Public
+    get "/app.bsky.feed.getAuthorFeed", AppBsky.FeedController, :get_author_feed
+
+    # App Bsky Unspecced - Public
+    get "/app.bsky.unspecced.getConfig", AppBsky.UnspeccedController, :get_config
+    get "/app.bsky.unspecced.getPostThreadV2", AppBsky.UnspeccedController, :get_post_thread_v2
+
     # Server Description
     get "/com.atproto.server.describeServer", ComATProto.ServerController, :describe_server
 
@@ -88,6 +95,9 @@ defmodule AetherPDSServerWeb.Router do
     # App Bsky Actor - Authenticated
     get "/app.bsky.actor.getPreferences", AppBsky.ActorController, :get_preferences
     post "/app.bsky.actor.putPreferences", AppBsky.ActorController, :put_preferences
+
+    # App Bsky Feed - Authenticated
+    get "/app.bsky.feed.getTimeline", AppBsky.FeedController, :get_timeline
 
     # Session Management
     get "/com.atproto.server.getSession", ComATProto.ServerController, :get_session

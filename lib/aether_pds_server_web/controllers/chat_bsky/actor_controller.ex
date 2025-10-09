@@ -1,4 +1,4 @@
-defmodule AetherPdsServerWeb.ChatBsky.ActorController do
+defmodule AetherPDSServerWeb.ChatBsky.ActorController do
   use AetherPDSServerWeb, :controller
 
   @doc """

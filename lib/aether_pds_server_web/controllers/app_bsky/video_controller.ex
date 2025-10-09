@@ -1,4 +1,4 @@
-defmodule AetherPdsServerWeb.AppBsky.VideoController do
+defmodule AetherPDSServerWeb.AppBsky.VideoController do
   use AetherPDSServerWeb, :controller
 
   @doc """

@@ -1,4 +1,4 @@
-defmodule AetherPdsServerWeb.AppBsky.GraphController do
+defmodule AetherPDSServerWeb.AppBsky.GraphController do
   use AetherPDSServerWeb, :controller
 
   @doc """
