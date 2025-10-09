@@ -65,9 +65,8 @@ defmodule AetherPDSServer.Accounts do
   end
 
   defp generate_cid(data) do
-    hash = :crypto.hash(:sha256, Jason.encode!(data))
-    encoded = Base.encode32(hash, case: :lower, padding: false)
-    "bafyrei" <> String.slice(encoded, 0..50)
+    alias Aether.ATProto.CID
+    CID.from_map(data)
   end
 
   @doc """

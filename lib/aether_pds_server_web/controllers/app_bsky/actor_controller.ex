@@ -298,7 +298,10 @@ defmodule AetherPDSServerWeb.AppBsky.ActorController do
 
   # Store preferences in the actor's repository
   defp put_preferences_record(did, preferences) do
+    alias Aether.ATProto.CID
+
     value = %{"preferences" => preferences}
+    cid = CID.from_map(value)
 
     case Repositories.get_record(did, "app.bsky.actor.preferences", "self") do
       nil ->
@@ -306,11 +309,12 @@ defmodule AetherPDSServerWeb.AppBsky.ActorController do
           repository_did: did,
           collection: "app.bsky.actor.preferences",
           rkey: "self",
+          cid: cid,
           value: value
         })
 
       record ->
-        Repositories.update_record(record, %{value: value})
+        Repositories.update_record(record, %{cid: cid, value: value})
     end
   end
 
