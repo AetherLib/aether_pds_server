@@ -1,4 +1,4 @@
-defmodule AetherPDSServerWeb.RepoController do
+defmodule AetherPDSServerWeb.ComATProto.RepoController do
   @moduledoc """
   XRPC Controller for ATProto Repository Operations
   """

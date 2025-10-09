@@ -1,5 +1,5 @@
 # lib/aether_pds_server_web/controllers/sync_controller.ex
-defmodule AetherPDSServerWeb.SyncController do
+defmodule AetherPDSServerWeb.ComATProto.SyncController do
   use AetherPDSServerWeb, :controller
 
   alias AetherPDSServer.Repositories
@@ -26,7 +26,10 @@ defmodule AetherPDSServerWeb.SyncController do
           {:error, reason} ->
             conn
             |> put_status(:internal_server_error)
-            |> json(%{error: "ExportFailed", message: "Failed to export repository: #{inspect(reason)}"})
+            |> json(%{
+              error: "ExportFailed",
+              message: "Failed to export repository: #{inspect(reason)}"
+            })
         end
     end
   end

@@ -1,5 +1,5 @@
 # lib/aether_pds_server_web/controllers/server_controller.ex
-defmodule AetherPDSServerWeb.ServerController do
+defmodule AetherPDSServerWeb.ComATProto.ServerController do
   use AetherPDSServerWeb, :controller
 
   alias AetherPDSServer.{Accounts, OAuth}

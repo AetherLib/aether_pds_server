@@ -1,5 +1,5 @@
 # lib/aether_pds_server_web/controllers/identity_controller.ex
-defmodule AetherPDSServerWeb.IdentityController do
+defmodule AetherPDSServerWeb.ComATProto.IdentityController do
   use AetherPDSServerWeb, :controller
 
   alias AetherPDSServer.Accounts

@@ -1,5 +1,5 @@
 # lib/aether_pds_server_web/controllers/blob_controller.ex
-defmodule AetherPDSServerWeb.BlobController do
+defmodule AetherPDSServerWeb.ComATProto.BlobController do
   use AetherPDSServerWeb, :controller
 
   alias AetherPDSServer.Repositories

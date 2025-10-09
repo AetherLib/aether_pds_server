@@ -1,8 +1,15 @@
 # lib/aether_pds_server_web/controllers/bsky/actor_controller.ex
-defmodule AetherPDSServerWeb.Bsky.ActorController do
+defmodule AetherPDSServerWeb.AppBsky.ActorController do
   use AetherPDSServerWeb, :controller
 
+  alias ElixirLS.LanguageServer.Providers.CodeAction.Helpers
   alias AetherPDSServer.{Accounts, Repositories}
+
+  @doc """
+  GET /xrpc/app.bsky.actor.getPreferences
+  """
+  def get_references(conn, _) do
+  end
 
   @doc """
   GET /xrpc/app.bsky.actor.getProfile
@@ -51,6 +58,82 @@ defmodule AetherPDSServerWeb.Bsky.ActorController do
         json(conn, response)
     end
   end
+
+  @doc """
+  GET /xrpc/app.bsky.actor.getProfiles
+
+  Get detailed profile view of an actor.
+  """
+  def get_profiles(conn, %{"actors" => actors}) do
+    # Actor can be a DID or a handle
+    accounts = resolve_actors(actors)
+
+    case accounts do
+      nil ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "ProfileNotFound", message: "Profile not found"})
+
+      account ->
+        # Get the profile record if it exists
+        profile = get_profile_record(account.did)
+
+        # Get follower/following counts (stubbed for now)
+        {followers_count, follows_count, posts_count} = get_stats(account.did)
+
+        response = %{
+          did: account.did,
+          handle: account.handle,
+          displayName: profile["displayName"],
+          description: profile["description"],
+          avatar: profile["avatar"],
+          banner: profile["banner"],
+          followersCount: followers_count,
+          followsCount: follows_count,
+          postsCount: posts_count,
+          indexedAt: DateTime.utc_now() |> DateTime.to_iso8601(),
+          # Optional fields
+          labels: [],
+          viewer: build_viewer_state(conn, account.did)
+        }
+
+        # Remove nil values
+        response =
+          response
+          |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+          |> Map.new()
+
+        json(conn, response)
+    end
+  end
+
+  @doc """
+  GET /xrpcs/app.bsky.actor.getSuggestions
+  """
+  def get_suggestions(conn, _params) do
+  end
+
+  @doc """
+  GET /xrpcs/app.bsky.actor.putPreferences
+  """
+  def put_preferences(conn, _params) do
+  end
+
+  @doc """
+  GET /xrpcs/app.bsky.actor.searchActorsTypeahead
+  """
+  def search_actors_typeahead(conn, _params) do
+  end
+
+  @doc """
+  GET /xrpcs/app.bsky.actor.searchActors
+  """
+  def search_actors(conn, _params) do
+  end
+
+  # --------------
+  # Helpers
+  # --------------
 
   # Resolve actor by DID or handle
   defp resolve_actor(actor) do
