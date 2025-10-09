@@ -5,20 +5,222 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
   @doc """
   GET /xrpc/app.bsky.feed.describeFeedGenerator
+
+  Get information about a feed generator, including policies and offered feed URIs.
+  Parameters:
+  - feed: AT URI of the feed generator (required)
   """
-  def describe_feed_generator(conn, _) do
+  def describe_feed_generator(conn, %{"feed" => feed_uri} = _params) do
+    # Parse the feed URI to get the DID and rkey
+    case parse_at_uri(feed_uri) do
+      {:ok, {did, "app.bsky.feed.generator", rkey}} ->
+        # Try to get the feed generator record
+        case Repositories.get_record(did, "app.bsky.feed.generator", rkey) do
+          nil ->
+            conn
+            |> put_status(:not_found)
+            |> json(%{error: "FeedNotFound", message: "Feed generator not found"})
+
+          record ->
+            # Get the creator's profile
+            creator = get_author_profile(did)
+
+            response = %{
+              uri: feed_uri,
+              cid: record.cid,
+              did: record.value["did"] || did,
+              creator: creator,
+              displayName: record.value["displayName"],
+              description: record.value["description"],
+              descriptionFacets: record.value["descriptionFacets"],
+              avatar: record.value["avatar"],
+              likeCount: 0,
+              acceptsInteractions: Map.get(record.value, "acceptsInteractions", false),
+              labels: [],
+              indexedAt: format_timestamp(DateTime.utc_now())
+            }
+
+            # Remove nil values
+            response =
+              response
+              |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+              |> Map.new()
+
+            json(conn, response)
+        end
+
+      _ ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "InvalidRequest", message: "Invalid feed URI format"})
+    end
+  end
+
+  def describe_feed_generator(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "InvalidRequest", message: "Missing required parameter: feed"})
   end
 
   @doc """
   GET /xrpc/app.bsky.feed.getActorFeeds
+
+  Get a list of feeds (feed generator records) created by the actor.
+  Parameters:
+  - actor: AT Identifier (DID or handle) - required
+  - limit: Number of items to return (default: 50, max: 100)
+  - cursor: Pagination cursor
   """
-  def get_actor_feeds(conn, _) do
+  def get_actor_feeds(conn, %{"actor" => actor} = params) do
+    limit = Map.get(params, "limit", "50") |> parse_integer(50) |> min(100)
+    cursor = Map.get(params, "cursor")
+
+    case resolve_actor(actor) do
+      nil ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "ActorNotFound", message: "Actor not found"})
+
+      account ->
+        # Get feed generator records from the actor
+        result =
+          Repositories.list_records(account.did, "app.bsky.feed.generator",
+            limit: limit + 1,
+            cursor: cursor
+          )
+
+        generators =
+          case result do
+            %{records: records} -> records
+            _ -> []
+          end
+
+        # Paginate
+        generators_to_return = Enum.take(generators, limit)
+
+        next_cursor =
+          if length(generators) > limit do
+            List.last(generators_to_return).rkey
+          else
+            nil
+          end
+
+        # Build feed generator views
+        feeds =
+          generators_to_return
+          |> Enum.map(fn record ->
+            uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
+            creator = get_author_profile(record.repository_did)
+
+            feed_view = %{
+              uri: uri,
+              cid: record.cid,
+              did: record.value["did"] || record.repository_did,
+              creator: creator,
+              displayName: record.value["displayName"],
+              description: record.value["description"],
+              descriptionFacets: record.value["descriptionFacets"],
+              avatar: record.value["avatar"],
+              likeCount: 0,
+              acceptsInteractions: Map.get(record.value, "acceptsInteractions", false),
+              labels: [],
+              indexedAt: format_timestamp(DateTime.utc_now())
+            }
+
+            # Remove nil values
+            feed_view
+            |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+            |> Map.new()
+          end)
+
+        response = %{cursor: cursor, feeds: feeds}
+        response = if next_cursor, do: Map.put(response, :cursor, next_cursor), else: response
+
+        json(conn, response)
+    end
+  end
+
+  def get_actor_feeds(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "InvalidRequest", message: "Missing required parameter: actor"})
   end
 
   @doc """
-  GET /xrpc/app.bsky.feed.getActorLike
+  GET /xrpc/app.bsky.feed.getActorLikes
+
+  Get a list of posts liked by an actor.
+  Parameters:
+  - actor: AT Identifier (DID or handle) - required
+  - limit: Number of items to return (default: 50, max: 100)
+  - cursor: Pagination cursor
   """
-  def get_actor_likes(conn, _) do
+  def get_actor_likes(conn, %{"actor" => actor} = params) do
+    current_did = conn.assigns[:current_did]
+    limit = Map.get(params, "limit", "50") |> parse_integer(50) |> min(100)
+    cursor = Map.get(params, "cursor")
+
+    case resolve_actor(actor) do
+      nil ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "ActorNotFound", message: "Actor not found"})
+
+      account ->
+        # Get like records from the actor
+        result =
+          Repositories.list_records(account.did, "app.bsky.feed.like",
+            limit: limit + 1,
+            cursor: cursor
+          )
+
+        likes =
+          case result do
+            %{records: records} -> records
+            _ -> []
+          end
+
+        # Paginate
+        likes_to_return = Enum.take(likes, limit)
+
+        next_cursor =
+          if length(likes) > limit do
+            List.last(likes_to_return).rkey
+          else
+            nil
+          end
+
+        # Build feed views for liked posts
+        feed_items =
+          likes_to_return
+          |> Enum.map(fn like_record ->
+            # Get the subject post URI
+            subject_uri = get_in(like_record.value, ["subject", "uri"])
+
+            case parse_at_uri(subject_uri) do
+              {:ok, {repo_did, collection, rkey}} ->
+                case Repositories.get_record(repo_did, collection, rkey) do
+                  nil -> nil
+                  post_record -> build_feed_view_post(post_record, repo_did)
+                end
+
+              _ ->
+                nil
+            end
+          end)
+          |> Enum.reject(&is_nil/1)
+
+        response = %{feed: feed_items}
+        response = if next_cursor, do: Map.put(response, :cursor, next_cursor), else: response
+
+        json(conn, response)
+    end
+  end
+
+  def get_actor_likes(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "InvalidRequest", message: "Missing required parameter: actor"})
   end
 
   @doc """
@@ -85,8 +287,77 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
   @doc """
   GET /xrpc/app.bsky.feed.getLikes
+
+  Get likes on a post.
+  Parameters:
+  - uri: AT URI of the post (required)
+  - cid: CID of the post (optional)
+  - limit: Number of likes to return (default: 50, max: 100)
+  - cursor: Pagination cursor
   """
-  def get_likes(conn, _) do
+  def get_likes(conn, %{"uri" => uri} = params) do
+    limit = Map.get(params, "limit", "50") |> parse_integer(50) |> min(100)
+    cursor = Map.get(params, "cursor")
+
+    # Get all accounts and find likes for this post
+    accounts = Accounts.list_accounts()
+
+    likes =
+      accounts
+      |> Enum.flat_map(fn account ->
+        case Repositories.list_records(account.did, "app.bsky.feed.like", limit: 1000) do
+          %{records: records} ->
+            records
+            |> Enum.filter(fn record ->
+              subject_uri = get_in(record.value, ["subject", "uri"])
+              subject_uri == uri
+            end)
+            |> Enum.map(fn record ->
+              %{
+                indexedAt: format_timestamp(DateTime.utc_now()),
+                createdAt: Map.get(record.value, "createdAt", format_timestamp(DateTime.utc_now())),
+                actor: get_author_profile(account.did)
+              }
+            end)
+
+          _ ->
+            []
+        end
+      end)
+      |> Enum.sort_by(fn like -> like.createdAt end, :desc)
+
+    # Apply cursor if present
+    likes =
+      if cursor do
+        Enum.drop_while(likes, fn like -> like.createdAt >= cursor end)
+      else
+        likes
+      end
+
+    # Paginate
+    likes_to_return = Enum.take(likes, limit)
+
+    next_cursor =
+      if length(likes) > limit do
+        List.last(likes_to_return).createdAt
+      else
+        nil
+      end
+
+    response = %{
+      uri: uri,
+      likes: likes_to_return
+    }
+
+    response = if next_cursor, do: Map.put(response, :cursor, next_cursor), else: response
+
+    json(conn, response)
+  end
+
+  def get_likes(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "InvalidRequest", message: "Missing required parameter: uri"})
   end
 
   @doc """
@@ -97,14 +368,89 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
   @doc """
   GET /xrpc/app.bsky.feed.getPostThread
+
+  Get a nested thread of posts.
+  Parameters:
+  - uri: AT URI of the post (required)
+  - depth: How many levels of reply depth to fetch (default: 6, max: 1000)
+  - parentHeight: How many levels of parent to fetch (default: 80, max: 1000)
   """
-  def get_post_thread(conn, _) do
+  def get_post_thread(conn, %{"uri" => uri} = params) do
+    current_did = conn.assigns[:current_did]
+    depth = Map.get(params, "depth", "6") |> parse_integer(6) |> min(1000)
+    parent_height = Map.get(params, "parentHeight", "80") |> parse_integer(80) |> min(1000)
+
+    case parse_at_uri(uri) do
+      {:ok, {repo_did, collection, rkey}} ->
+        case Repositories.get_record(repo_did, collection, rkey) do
+          nil ->
+            # Return not found thread
+            thread = %{
+              "$type" => "app.bsky.feed.defs#notFoundPost",
+              uri: uri,
+              notFound: true
+            }
+
+            json(conn, %{thread: thread})
+
+          record ->
+            thread = build_thread_view(record, current_did, depth, parent_height)
+            json(conn, %{thread: thread})
+        end
+
+      {:error, _} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "InvalidRequest", message: "Invalid AT URI format"})
+    end
+  end
+
+  def get_post_thread(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "InvalidRequest", message: "Missing required parameter: uri"})
   end
 
   @doc """
   GET /xrpc/app.bsky.feed.getPosts
+
+  Get a view of multiple posts by their URIs.
+  Parameters:
+  - uris: Array of post URIs (required, max 25)
   """
-  def get_posts(conn, _) do
+  def get_posts(conn, %{"uris" => uris} = _params) when is_list(uris) do
+    current_did = conn.assigns[:current_did]
+
+    posts =
+      uris
+      |> Enum.take(25)
+      |> Enum.map(fn uri ->
+        case parse_at_uri(uri) do
+          {:ok, {repo_did, collection, rkey}} ->
+            case Repositories.get_record(repo_did, collection, rkey) do
+              nil -> nil
+              record -> build_post_view(record, current_did)
+            end
+
+          _ ->
+            nil
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    json(conn, %{posts: posts})
+  end
+
+  # Handle single URI (when Phoenix doesn't parse as list)
+  def get_posts(conn, %{"uris" => uri}) when is_binary(uri) do
+    get_posts(conn, %{"uris" => [uri]})
+  end
+
+  # Handle missing uris parameter
+  def get_posts(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "InvalidRequest", message: "Missing required parameter: uris"})
   end
 
   @doc """
@@ -115,8 +461,77 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
   @doc """
   GET /xrpc/app.bsky.feed.getRepostedBy
+
+  Get accounts that reposted a post.
+  Parameters:
+  - uri: AT URI of the post (required)
+  - cid: CID of the post (optional)
+  - limit: Number of reposts to return (default: 50, max: 100)
+  - cursor: Pagination cursor
   """
-  def get_reposted_by(conn, _) do
+  def get_reposted_by(conn, %{"uri" => uri} = params) do
+    limit = Map.get(params, "limit", "50") |> parse_integer(50) |> min(100)
+    cursor = Map.get(params, "cursor")
+
+    # Get all accounts and find reposts for this post
+    accounts = Accounts.list_accounts()
+
+    reposters =
+      accounts
+      |> Enum.flat_map(fn account ->
+        case Repositories.list_records(account.did, "app.bsky.feed.repost", limit: 1000) do
+          %{records: records} ->
+            records
+            |> Enum.filter(fn record ->
+              subject_uri = get_in(record.value, ["subject", "uri"])
+              subject_uri == uri
+            end)
+            |> Enum.map(fn record ->
+              %{
+                indexedAt: format_timestamp(DateTime.utc_now()),
+                createdAt: Map.get(record.value, "createdAt", format_timestamp(DateTime.utc_now())),
+                actor: get_author_profile(account.did)
+              }
+            end)
+
+          _ ->
+            []
+        end
+      end)
+      |> Enum.sort_by(fn repost -> repost.createdAt end, :desc)
+
+    # Apply cursor if present
+    reposters =
+      if cursor do
+        Enum.drop_while(reposters, fn repost -> repost.createdAt >= cursor end)
+      else
+        reposters
+      end
+
+    # Paginate
+    reposters_to_return = Enum.take(reposters, limit)
+
+    next_cursor =
+      if length(reposters) > limit do
+        List.last(reposters_to_return).createdAt
+      else
+        nil
+      end
+
+    response = %{
+      uri: uri,
+      repostedBy: Enum.map(reposters_to_return, fn r -> r.actor end)
+    }
+
+    response = if next_cursor, do: Map.put(response, :cursor, next_cursor), else: response
+
+    json(conn, response)
+  end
+
+  def get_reposted_by(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "InvalidRequest", message: "Missing required parameter: uri"})
   end
 
   @doc """
@@ -161,8 +576,121 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
   @doc """
   GET /xrpc/app.bsky.feed.searchPosts
+
+  Search for posts matching a query.
+  Parameters:
+  - q: Search query (required)
+  - limit: Number of results (default: 25, max: 100)
+  - cursor: Pagination cursor
+  - sort: Sort order ("top" or "latest", default: "latest")
+  - since: ISO8601 datetime - only posts after this time
+  - until: ISO8601 datetime - only posts before this time
+  - mentions: DID - filter to posts mentioning this DID
+  - author: DID - filter to posts by this author
+  - lang: Language code - filter by language
+  - domain: Domain - filter by URL domain
+  - url: URL - filter by URL
   """
-  def search_posts(conn, _) do
+  def search_posts(conn, %{"q" => query} = params) do
+    current_did = conn.assigns[:current_did]
+    limit = Map.get(params, "limit", "25") |> parse_integer(25) |> min(100)
+    cursor = Map.get(params, "cursor")
+    sort = Map.get(params, "sort", "latest")
+    author_filter = Map.get(params, "author")
+
+    query_lower = String.downcase(query)
+
+    # Get all accounts and search their posts
+    accounts = Accounts.list_accounts()
+
+    # Filter accounts by author if specified
+    accounts =
+      if author_filter do
+        Enum.filter(accounts, fn account -> account.did == author_filter end)
+      else
+        accounts
+      end
+
+    posts =
+      accounts
+      |> Enum.flat_map(fn account ->
+        case Repositories.list_records(account.did, "app.bsky.feed.post", limit: 1000) do
+          %{records: records} ->
+            records
+            |> Enum.filter(fn record ->
+              # Search in post text
+              text = Map.get(record.value, "text", "")
+              String.contains?(String.downcase(text), query_lower)
+            end)
+            |> Enum.map(fn record ->
+              {get_post_timestamp(record), record}
+            end)
+
+          _ ->
+            []
+        end
+      end)
+
+    # Sort based on parameter
+    posts =
+      case sort do
+        "top" ->
+          # Sort by engagement (likes + reposts + replies)
+          Enum.sort_by(posts, fn {_ts, record} ->
+            uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
+            {reply_count, repost_count, like_count, _quote_count} = get_post_engagement_counts(uri)
+            -(reply_count + repost_count + like_count)
+          end)
+
+        _ ->
+          # Sort by timestamp (latest first)
+          Enum.sort_by(posts, fn {ts, _record} -> ts end, {:desc, DateTime})
+      end
+
+    # Apply cursor if present (timestamp-based)
+    posts =
+      if cursor do
+        case DateTime.from_iso8601(cursor) do
+          {:ok, cursor_dt, _} ->
+            Enum.drop_while(posts, fn {ts, _record} ->
+              DateTime.compare(ts, cursor_dt) != :lt
+            end)
+
+          _ ->
+            posts
+        end
+      else
+        posts
+      end
+
+    # Paginate
+    posts_to_return = Enum.take(posts, limit)
+
+    next_cursor =
+      if length(posts) > limit do
+        {last_ts, _} = List.last(posts_to_return)
+        format_timestamp(last_ts)
+      else
+        nil
+      end
+
+    # Build feed views
+    feed_posts =
+      posts_to_return
+      |> Enum.map(fn {_ts, record} ->
+        build_post_view(record, current_did)
+      end)
+
+    response = %{posts: feed_posts}
+    response = if next_cursor, do: Map.put(response, :cursor, next_cursor), else: response
+
+    json(conn, response)
+  end
+
+  def search_posts(conn, _params) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "InvalidRequest", message: "Missing required parameter: q"})
   end
 
   @doc """
@@ -667,6 +1195,92 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     |> DateTime.truncate(:millisecond)
     |> DateTime.to_iso8601()
   end
+
+  # Build nested thread view for get_post_thread
+  defp build_thread_view(record, current_did, max_depth, max_parent_height) do
+    uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
+    post = build_post_view(record, current_did)
+
+    # Check if this is the root of the thread
+    parent_ref = get_in(record.value, ["reply", "parent"])
+
+    # Build parent chain if exists and within height limit
+    parent =
+      if parent_ref && max_parent_height > 0 do
+        parent_uri = parent_ref["uri"]
+
+        case parse_at_uri(parent_uri) do
+          {:ok, {repo_did, collection, rkey}} ->
+            case Repositories.get_record(repo_did, collection, rkey) do
+              nil ->
+                %{
+                  "$type" => "app.bsky.feed.defs#notFoundPost",
+                  uri: parent_uri,
+                  notFound: true
+                }
+
+              parent_record ->
+                build_thread_view(parent_record, current_did, max_depth, max_parent_height - 1)
+            end
+
+          _ ->
+            %{
+              "$type" => "app.bsky.feed.defs#notFoundPost",
+              uri: parent_uri,
+              notFound: true
+            }
+        end
+      else
+        nil
+      end
+
+    # Get replies if within depth limit
+    replies =
+      if max_depth > 0 do
+        get_thread_replies(uri, current_did, max_depth)
+      else
+        []
+      end
+
+    # Build thread item
+    thread_item = %{
+      "$type" => "app.bsky.feed.defs#threadViewPost",
+      post: post
+    }
+
+    thread_item = if parent, do: Map.put(thread_item, :parent, parent), else: thread_item
+
+    thread_item =
+      if length(replies) > 0, do: Map.put(thread_item, :replies, replies), else: thread_item
+
+    thread_item
+  end
+
+  # Get replies for a post in a thread
+  defp get_thread_replies(post_uri, current_did, max_depth) when max_depth > 0 do
+    # Get all accounts and find replies
+    accounts = Accounts.list_accounts()
+
+    accounts
+    |> Enum.flat_map(fn account ->
+      case Repositories.list_records(account.did, "app.bsky.feed.post", limit: 1000) do
+        %{records: records} ->
+          records
+          |> Enum.filter(fn record ->
+            parent_uri = get_in(record.value, ["reply", "parent", "uri"])
+            parent_uri == post_uri
+          end)
+          |> Enum.map(fn record ->
+            build_thread_view(record, current_did, max_depth - 1, 0)
+          end)
+
+        _ ->
+          []
+      end
+    end)
+  end
+
+  defp get_thread_replies(_post_uri, _current_did, _max_depth), do: []
 
   # Get engagement counts for a post
   defp get_post_engagement_counts(post_uri) do
