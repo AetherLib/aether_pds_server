@@ -360,7 +360,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     reason = %{
       "$type" => "app.bsky.feed.defs#reasonRepost",
       by: reposter,
-      indexedAt: DateTime.utc_now() |> DateTime.to_iso8601()
+      indexedAt: format_timestamp(DateTime.utc_now())
     }
 
     feed_item = %{
@@ -452,13 +452,27 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     author = get_author_profile(record.repository_did)
     uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
 
+    # Get engagement counts
+    {reply_count, repost_count, like_count, quote_count} = get_post_engagement_counts(uri)
+
     %{
       "$type" => "app.bsky.feed.defs#postView",
       uri: uri,
       cid: record.cid,
       author: author,
       record: record.value,
-      indexedAt: DateTime.utc_now() |> DateTime.to_iso8601()
+      replyCount: reply_count,
+      repostCount: repost_count,
+      likeCount: like_count,
+      quoteCount: quote_count,
+      bookmarkCount: 0,
+      indexedAt: format_timestamp(DateTime.utc_now()),
+      viewer: %{
+        bookmarked: false,
+        threadMuted: false,
+        embeddingDisabled: false
+      },
+      labels: []
     }
   end
 
@@ -467,18 +481,23 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     author = get_author_profile(record.repository_did)
     uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
 
+    # Get engagement counts
+    {reply_count, repost_count, like_count, quote_count} = get_post_engagement_counts(uri)
+
     %{
       "$type" => "app.bsky.feed.defs#postView",
       uri: uri,
       cid: record.cid,
       author: author,
       record: record.value,
-      indexedAt: DateTime.utc_now() |> DateTime.to_iso8601(),
-      replyCount: 0,
-      repostCount: 0,
-      likeCount: 0,
-      quoteCount: 0,
+      replyCount: reply_count,
+      repostCount: repost_count,
+      likeCount: like_count,
+      quoteCount: quote_count,
+      bookmarkCount: 0,
+      indexedAt: format_timestamp(DateTime.utc_now()),
       viewer: %{
+        bookmarked: false,
         threadMuted: false,
         embeddingDisabled: false
       },
@@ -569,16 +588,27 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     author = get_author_profile(author_did)
     uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
 
+    # Get engagement counts
+    {reply_count, repost_count, like_count, quote_count} = get_post_engagement_counts(uri)
+
     post = %{
       "$type" => "app.bsky.feed.defs#postView",
       uri: uri,
       cid: record.cid,
       author: author,
       record: record.value,
-      indexedAt: DateTime.utc_now() |> DateTime.to_iso8601(),
-      replyCount: 0,
-      repostCount: 0,
-      likeCount: 0
+      replyCount: reply_count,
+      repostCount: repost_count,
+      likeCount: like_count,
+      quoteCount: quote_count,
+      bookmarkCount: 0,
+      indexedAt: format_timestamp(DateTime.utc_now()),
+      viewer: %{
+        bookmarked: false,
+        threadMuted: false,
+        embeddingDisabled: false
+      },
+      labels: []
     }
 
     %{
@@ -630,4 +660,111 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
   defp parse_integer(value, _default) when is_integer(value), do: value
   defp parse_integer(_, default), do: default
+
+  # Format timestamp to ISO8601 with milliseconds (e.g., 2025-10-09T17:15:14.922Z)
+  defp format_timestamp(datetime) do
+    datetime
+    |> DateTime.truncate(:millisecond)
+    |> DateTime.to_iso8601()
+  end
+
+  # Get engagement counts for a post
+  defp get_post_engagement_counts(post_uri) do
+    # Count replies - posts that have this post as parent or root
+    reply_count = count_replies_to_post(post_uri)
+
+    # Count reposts - app.bsky.feed.repost records with this post as subject
+    repost_count = count_reposts_of_post(post_uri)
+
+    # Count likes - app.bsky.feed.like records with this post as subject
+    like_count = count_likes_of_post(post_uri)
+
+    # Count quotes - posts with this post in embed.record
+    quote_count = count_quotes_of_post(post_uri)
+
+    {reply_count, repost_count, like_count, quote_count}
+  end
+
+  # Count replies to a post
+  defp count_replies_to_post(post_uri) do
+    # Get all accounts to check their posts
+    accounts = Accounts.list_accounts()
+
+    accounts
+    |> Enum.map(fn account ->
+      case Repositories.list_records(account.did, "app.bsky.feed.post", limit: 1000) do
+        %{records: records} ->
+          Enum.count(records, fn record ->
+            reply_parent = get_in(record.value, ["reply", "parent", "uri"])
+            reply_root = get_in(record.value, ["reply", "root", "uri"])
+            reply_parent == post_uri || reply_root == post_uri
+          end)
+
+        _ ->
+          0
+      end
+    end)
+    |> Enum.sum()
+  end
+
+  # Count reposts of a post
+  defp count_reposts_of_post(post_uri) do
+    accounts = Accounts.list_accounts()
+
+    accounts
+    |> Enum.map(fn account ->
+      case Repositories.list_records(account.did, "app.bsky.feed.repost", limit: 1000) do
+        %{records: records} ->
+          Enum.count(records, fn record ->
+            subject_uri = get_in(record.value, ["subject", "uri"])
+            subject_uri == post_uri
+          end)
+
+        _ ->
+          0
+      end
+    end)
+    |> Enum.sum()
+  end
+
+  # Count likes of a post
+  defp count_likes_of_post(post_uri) do
+    accounts = Accounts.list_accounts()
+
+    accounts
+    |> Enum.map(fn account ->
+      case Repositories.list_records(account.did, "app.bsky.feed.like", limit: 1000) do
+        %{records: records} ->
+          Enum.count(records, fn record ->
+            subject_uri = get_in(record.value, ["subject", "uri"])
+            subject_uri == post_uri
+          end)
+
+        _ ->
+          0
+      end
+    end)
+    |> Enum.sum()
+  end
+
+  # Count quotes of a post (posts that embed this post)
+  defp count_quotes_of_post(post_uri) do
+    accounts = Accounts.list_accounts()
+
+    accounts
+    |> Enum.map(fn account ->
+      case Repositories.list_records(account.did, "app.bsky.feed.post", limit: 1000) do
+        %{records: records} ->
+          Enum.count(records, fn record ->
+            # Check if embed.record.uri matches the post_uri
+            embed_uri = get_in(record.value, ["embed", "record", "uri"])
+            embed_uri == post_uri
+          end)
+
+        _ ->
+          0
+      end
+    end)
+    |> Enum.sum()
+  end
 end
