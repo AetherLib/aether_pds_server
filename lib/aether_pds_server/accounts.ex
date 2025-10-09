@@ -156,6 +156,15 @@ defmodule AetherPDSServer.Accounts do
     Repo.get_by(Account, email: email)
   end
 
+  @doc """
+  List all accounts.
+  """
+  def list_accounts do
+    import Ecto.Query
+
+    Repo.all(from a in Account, order_by: [asc: a.handle])
+  end
+
   # ============================================================================
   # Authentication
   # ============================================================================

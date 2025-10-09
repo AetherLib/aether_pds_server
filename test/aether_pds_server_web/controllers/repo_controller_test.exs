@@ -1,7 +1,6 @@
 defmodule AetherPDSServerWeb.RepoControllerTest do
   use AetherPDSServerWeb.ConnCase
 
-
   setup %{conn: conn} do
     # Create account and get token
     params = %{
@@ -301,7 +300,10 @@ defmodule AetherPDSServerWeb.RepoControllerTest do
 
     test "lists records in collection", %{conn: conn, did: did} do
       conn =
-        get(conn, ~p"/xrpc/com.atproto.repo.listRecords?repo=#{did}&collection=app.bsky.feed.post")
+        get(
+          conn,
+          ~p"/xrpc/com.atproto.repo.listRecords?repo=#{did}&collection=app.bsky.feed.post"
+        )
 
       assert json = json_response(conn, 200)
       assert json["records"]

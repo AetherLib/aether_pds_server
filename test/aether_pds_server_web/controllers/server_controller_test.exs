@@ -1,7 +1,6 @@
 defmodule AetherPDSServerWeb.ServerControllerTest do
   use AetherPDSServerWeb.ConnCase
 
-
   describe "GET /xrpc/com.atproto.server.describeServer" do
     test "returns server metadata", %{conn: conn} do
       conn = get(conn, ~p"/xrpc/com.atproto.server.describeServer")

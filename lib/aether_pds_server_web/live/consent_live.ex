@@ -55,7 +55,8 @@ defmodule AetherPDSServerWeb.ConsentLive do
         {:noreply, redirect(socket, external: redirect_url)}
 
       {:error, reason} ->
-        {:noreply, assign(socket, :error, "Failed to create authorization code: #{inspect(reason)}")}
+        {:noreply,
+         assign(socket, :error, "Failed to create authorization code: #{inspect(reason)}")}
     end
   end
 

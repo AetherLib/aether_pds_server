@@ -37,13 +37,19 @@ defmodule AetherPDSServer.FederationTest do
 
     test "accepts limit option" do
       # Just verify the function accepts the option
-      result = Federation.fetch_remote_records("did:plc:nonexistent", "app.bsky.feed.post", limit: 10)
+      result =
+        Federation.fetch_remote_records("did:plc:nonexistent", "app.bsky.feed.post", limit: 10)
+
       assert {:error, _} = result
     end
 
     test "accepts cursor option" do
       # Just verify the function accepts the option
-      result = Federation.fetch_remote_records("did:plc:nonexistent", "app.bsky.feed.post", cursor: "abc")
+      result =
+        Federation.fetch_remote_records("did:plc:nonexistent", "app.bsky.feed.post",
+          cursor: "abc"
+        )
+
       assert {:error, _} = result
     end
   end

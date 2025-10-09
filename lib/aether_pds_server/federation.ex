@@ -86,7 +86,10 @@ defmodule AetherPDSServer.Federation do
       {:ok, record}
     else
       {:error, reason} = error ->
-        Logger.error("Failed to fetch remote record #{did}/#{collection}/#{rkey}: #{inspect(reason)}")
+        Logger.error(
+          "Failed to fetch remote record #{did}/#{collection}/#{rkey}: #{inspect(reason)}"
+        )
+
         error
     end
   end
@@ -111,7 +114,10 @@ defmodule AetherPDSServer.Federation do
 
     with {:ok, pds_endpoint} <- discover_pds(did),
          {:ok, records} <- list_records_from_pds(pds_endpoint, did, collection, opts) do
-      Logger.info("Fetched #{length(Map.get(records, "records", []))} records from #{did}/#{collection}")
+      Logger.info(
+        "Fetched #{length(Map.get(records, "records", []))} records from #{did}/#{collection}"
+      )
+
       {:ok, records}
     else
       {:error, reason} = error ->
