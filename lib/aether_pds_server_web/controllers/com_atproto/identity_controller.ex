@@ -6,6 +6,31 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
   alias AetherPDSServer.DIDResolver
 
   @doc """
+  GET /.well-known/atproto-did
+
+  Serve the DID for handle-based resolution. This is called when someone
+  visits https://[handle]/.well-known/atproto-did to verify handle ownership.
+  The response should be plain text containing just the DID.
+  """
+  def well_known_did(conn, _params) do
+    # Get the host from the request
+    host = conn.host
+
+    # Look up the account by handle (the host is the handle)
+    case Accounts.get_account_by_handle(host) do
+      %{did: did} ->
+        conn
+        |> put_resp_content_type("text/plain")
+        |> send_resp(200, did)
+
+      nil ->
+        conn
+        |> put_resp_content_type("text/plain")
+        |> send_resp(404, "Handle not found")
+    end
+  end
+
+  @doc """
   GET /xrpc/com.atproto.identity.resolveHandle
 
   Resolve a handle to a DID (local or remote)

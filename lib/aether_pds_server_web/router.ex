@@ -33,6 +33,9 @@ defmodule AetherPDSServerWeb.Router do
     # OAuth server metadata
     get "/.well-known/oauth-authorization-server", OAuthController, :metadata
 
+    # ATProto DID resolution for handle verification
+    get "/.well-known/atproto-did", ComATProto.IdentityController, :well_known_did
+
     # Token endpoints
     post "/oauth/token", OAuthController, :token
     post "/oauth/revoke", OAuthController, :revoke
