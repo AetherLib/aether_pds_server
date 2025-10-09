@@ -1161,6 +1161,35 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     end)
   end
 
+  defp apply_feed_filter(posts, "posts_and_author_threads", did) do
+    # Show posts and self-threads (author replying to their own posts)
+    Enum.filter(posts, fn post ->
+      case Map.get(post.value, "reply") do
+        nil ->
+          # Not a reply, include it
+          true
+
+        reply ->
+          # It's a reply - only include if replying to self
+          parent_uri = get_in(reply, ["parent", "uri"])
+          root_uri = get_in(reply, ["root", "uri"])
+
+          # Check if parent or root belongs to the same author
+          is_self_thread =
+            case parse_at_uri(parent_uri) do
+              {:ok, {parent_did, _, _}} -> parent_did == did
+              _ -> false
+            end ||
+            case parse_at_uri(root_uri) do
+              {:ok, {root_did, _, _}} -> root_did == did
+              _ -> false
+            end
+
+          is_self_thread
+      end
+    end)
+  end
+
   defp apply_feed_filter(posts, _filter, _did) do
     # Default: posts_with_replies - return all posts
     posts
