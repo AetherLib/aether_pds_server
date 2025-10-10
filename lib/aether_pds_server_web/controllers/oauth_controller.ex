@@ -106,6 +106,7 @@ defmodule AetherPDSServerWeb.OAuthController do
 
     # Render login page
     conn
+    |> put_view(AetherPDSServerWeb.OAuthHTML)
     |> put_layout(false)
     |> render(:login, client_name: client_name, error: error)
   end
@@ -122,9 +123,20 @@ defmodule AetherPDSServerWeb.OAuthController do
 
         if oauth_request do
           # Redirect back to authorization with logged in user
+          # The oauth_request is already in session, so we can just redirect back with the original params
+          query_params = %{
+            "response_type" => oauth_request.response_type,
+            "client_id" => oauth_request.client_id,
+            "redirect_uri" => oauth_request.redirect_uri,
+            "state" => oauth_request.state,
+            "code_challenge" => oauth_request.code_challenge,
+            "code_challenge_method" => oauth_request.code_challenge_method,
+            "scope" => oauth_request.scope
+          }
+
           conn
           |> put_session(:user_did, user.did)
-          |> redirect(to: "/oauth/authorize?#{URI.encode_query(oauth_request)}")
+          |> redirect(to: "/oauth/authorize?#{URI.encode_query(query_params)}")
         else
           conn
           |> put_flash(:error, "Invalid session. Please try again.")
@@ -467,6 +479,7 @@ defmodule AetherPDSServerWeb.OAuthController do
   defp render_consent_page(conn, user, client, oauth_request) do
     # Render HTML consent page
     conn
+    |> put_view(AetherPDSServerWeb.OAuthHTML)
     |> put_layout(false)
     |> render(:consent,
       user: user,
