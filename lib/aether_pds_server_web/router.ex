@@ -30,6 +30,9 @@ defmodule AetherPDSServerWeb.Router do
   scope "/", AetherPDSServerWeb do
     pipe_through :api
 
+    # OAuth protected resource metadata (tells clients this PDS supports OAuth)
+    get "/.well-known/oauth-protected-resource", OAuthController, :protected_resource_metadata
+
     # OAuth server metadata
     get "/.well-known/oauth-authorization-server", OAuthController, :metadata
 
@@ -39,6 +42,17 @@ defmodule AetherPDSServerWeb.Router do
     # Token endpoints
     post "/oauth/token", OAuthController, :token
     post "/oauth/revoke", OAuthController, :revoke
+  end
+
+  # OAuth UI routes (login and consent pages)
+  scope "/oauth", AetherPDSServerWeb do
+    pipe_through [:browser]
+
+    # Authorization and consent flow
+    get "/authorize", OAuthController, :authorize
+    get "/login", OAuthController, :login_page
+    post "/login", OAuthController, :login
+    post "/authorize/consent", OAuthController, :consent
   end
 
   # ============================================================================

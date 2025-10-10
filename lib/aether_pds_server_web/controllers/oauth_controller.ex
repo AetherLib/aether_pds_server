@@ -14,6 +14,22 @@ defmodule AetherPDSServerWeb.OAuthController do
   # ============================================================================
 
   @doc """
+  GET /.well-known/oauth-protected-resource
+
+  Returns protected resource metadata (tells clients this PDS supports OAuth)
+  """
+  def protected_resource_metadata(conn, _params) do
+    base_url = AetherPDSServerWeb.Endpoint.url()
+
+    metadata = %{
+      resource: base_url,
+      authorization_servers: [base_url]
+    }
+
+    json(conn, metadata)
+  end
+
+  @doc """
   GET /.well-known/oauth-authorization-server
 
   Returns OAuth server metadata (RFC 8414)
