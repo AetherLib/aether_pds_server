@@ -10,6 +10,8 @@ defmodule AetherPDSServerWeb.ComATProto.ServerController do
   Returns server metadata and capabilities
   """
   def describe_server(conn, _params) do
+    base_url = AetherPDSServerWeb.Endpoint.url()
+
     response = %{
       # Users on this PDS will have handles like: alice.pds.aetherlib.org
       availableUserDomains: ["pds.aetherlib.org"],
@@ -29,7 +31,10 @@ defmodule AetherPDSServerWeb.ComATProto.ServerController do
       },
 
       # DID of the server itself (optional but recommended)
-      did: "did:web:pds.aetherlib.org"
+      did: "did:web:pds.aetherlib.org",
+
+      # OAuth authorization servers (tells clients to use OAuth instead of legacy auth)
+      authorizationServers: [base_url]
     }
 
     json(conn, response)
