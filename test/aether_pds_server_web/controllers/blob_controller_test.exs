@@ -137,4 +137,135 @@ defmodule AetherPDSServerWeb.ComATProto.BlobControllerTest do
       assert json_response(conn, 401)
     end
   end
+
+  describe "GET /xrpc/com.atproto.sync.getBlob" do
+    @tag :integration
+    test "retrieves a blob from MinIO", %{
+      conn: conn,
+      account: account,
+      access_token: access_token
+    } do
+      # First upload a blob
+      blob_data = load_small_test_image()
+
+      upload_conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{access_token}")
+        |> put_req_header("content-type", "image/png")
+        |> post("/xrpc/com.atproto.repo.uploadBlob", blob_data)
+
+      assert %{
+               "blob" => %{
+                 "ref" => %{"$link" => cid}
+               }
+             } = json_response(upload_conn, 200)
+
+      # Now retrieve the blob
+      download_conn = get(conn, "/xrpc/com.atproto.sync.getBlob?did=#{account.did}&cid=#{cid}")
+
+      assert download_conn.status == 200
+      [content_type | _] = get_resp_header(download_conn, "content-type")
+      assert String.starts_with?(content_type, "image/png")
+      downloaded_data = download_conn.resp_body
+      assert downloaded_data == blob_data
+      assert byte_size(downloaded_data) == byte_size(blob_data)
+
+      IO.puts("✅ Successfully retrieved blob from MinIO (#{byte_size(blob_data)} bytes)")
+    end
+
+    test "returns 404 for non-existent blob", %{conn: conn, account: account} do
+      conn = get(conn, "/xrpc/com.atproto.sync.getBlob?did=#{account.did}&cid=bafkreifake")
+
+      assert json_response(conn, 404) == %{
+               "error" => "BlobNotFound",
+               "message" => "Blob not found"
+             }
+    end
+  end
+
+  describe "Blob cleanup" do
+    @tag :integration
+    test "cleanup_unreferenced_blob deletes from MinIO when no references", %{
+      conn: conn,
+      account: account,
+      access_token: access_token
+    } do
+      # Upload a blob
+      blob_data = load_small_test_image()
+
+      upload_conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{access_token}")
+        |> put_req_header("content-type", "image/png")
+        |> post("/xrpc/com.atproto.repo.uploadBlob", blob_data)
+
+      assert %{
+               "blob" => %{
+                 "ref" => %{"$link" => cid}
+               }
+             } = json_response(upload_conn, 200)
+
+      # Verify blob exists in database
+      blob = Repositories.get_blob(account.did, cid)
+      assert blob != nil
+
+      # Verify blob can be downloaded
+      download_conn = get(conn, "/xrpc/com.atproto.sync.getBlob?did=#{account.did}&cid=#{cid}")
+      assert download_conn.status == 200
+
+      # Cleanup the blob (no references, so it should be deleted)
+      assert {:ok, :deleted} = Repositories.cleanup_unreferenced_blob(cid)
+
+      # Verify blob is deleted from database
+      assert Repositories.get_blob(account.did, cid) == nil
+
+      # Verify blob cannot be downloaded anymore
+      download_conn2 = get(conn, "/xrpc/com.atproto.sync.getBlob?did=#{account.did}&cid=#{cid}")
+      assert json_response(download_conn2, 404)
+
+      IO.puts("✅ Blob successfully cleaned up from MinIO and database")
+    end
+
+    @tag :integration
+    test "cleanup_unreferenced_blob keeps blob when referenced", %{
+      conn: conn,
+      account: account,
+      access_token: access_token
+    } do
+      # Upload a blob
+      blob_data = load_small_test_image()
+
+      upload_conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{access_token}")
+        |> put_req_header("content-type", "image/png")
+        |> post("/xrpc/com.atproto.repo.uploadBlob", blob_data)
+
+      assert %{
+               "blob" => %{
+                 "ref" => %{"$link" => cid}
+               }
+             } = json_response(upload_conn, 200)
+
+      # Create a reference to the blob
+      {:ok, _ref} =
+        Repositories.create_blob_ref(%{
+          blob_cid: cid,
+          repository_did: account.did,
+          record_uri: "at://#{account.did}/app.bsky.feed.post/test123"
+        })
+
+      # Try to cleanup - should not delete because it's referenced
+      assert {:ok, :still_referenced} = Repositories.cleanup_unreferenced_blob(cid)
+
+      # Verify blob still exists
+      assert Repositories.get_blob(account.did, cid) != nil
+
+      # Verify blob can still be downloaded
+      download_conn = get(conn, "/xrpc/com.atproto.sync.getBlob?did=#{account.did}&cid=#{cid}")
+      assert download_conn.status == 200
+
+      IO.puts("✅ Blob correctly preserved when referenced")
+    end
+  end
 end

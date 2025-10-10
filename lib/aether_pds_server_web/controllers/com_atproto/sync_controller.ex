@@ -3,6 +3,7 @@ defmodule AetherPDSServerWeb.ComATProto.SyncController do
   use AetherPDSServerWeb, :controller
 
   alias AetherPDSServer.Repositories
+  alias AetherPDSServer.MinioStorage
 
   @doc """
   GET /xrpc/com.atproto.sync.getRepo
@@ -112,9 +113,17 @@ defmodule AetherPDSServerWeb.ComATProto.SyncController do
         |> json(%{error: "BlobNotFound", message: "Blob not found"})
 
       blob ->
-        conn
-        |> put_resp_content_type(blob.mime_type || "application/octet-stream")
-        |> send_resp(200, blob.data)
+        case MinioStorage.download_blob(blob.storage_key) do
+          {:ok, data} ->
+            conn
+            |> put_resp_content_type(blob.mime_type || "application/octet-stream")
+            |> send_resp(200, data)
+
+          {:error, _reason} ->
+            conn
+            |> put_status(:internal_server_error)
+            |> json(%{error: "BlobDownloadFailed", message: "Failed to download blob from storage"})
+        end
     end
   end
 

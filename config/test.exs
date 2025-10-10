@@ -32,10 +32,10 @@ config :logger, level: :warning
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
 
-# # Configure MinIO for testing (using credentials from .env)
-# config :aether_pds_server, :minio,
-#   endpoint: "http://localhost:9002",
-#   bucket: "blob",
-#   access_key_id: "TncEgp5sZoqivi1b7593",
-#   secret_access_key: "CFUxFp4nx8vn0hblUngxzrQYETDuVbHgOtaSx5Pa",
-#   region: "us-east-1"
+# Configure MinIO for testing (using credentials from .env)
+config :aether_pds_server, :minio,
+  endpoint: "http://localhost:9002",
+  bucket: "blob",
+  access_key_id: "TncEgp5sZoqivi1b7593",
+  secret_access_key: "CFUxFp4nx8vn0hblUngxzrQYETDuVbHgOtaSx5Pa",
+  region: "us-east-1"

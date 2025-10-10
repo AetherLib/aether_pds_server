@@ -340,6 +340,40 @@ defmodule AetherPDSServer.Repositories do
   end
 
   @doc """
+  Deletes a blob with cleanup - removes from MinIO if no longer referenced.
+  This should be called when removing blob references to ensure orphaned blobs are cleaned up.
+  """
+  def cleanup_unreferenced_blob(blob_cid) do
+    # Check if blob is still referenced
+    if not blob_referenced?(blob_cid) do
+      # Find the blob to get its storage_key
+      case Repo.get_by(Blob, cid: blob_cid) do
+        nil ->
+          {:ok, :already_deleted}
+
+        blob ->
+          # Delete from MinIO first
+          case AetherPDSServer.MinioStorage.delete_blob(blob.storage_key) do
+            :ok ->
+              # Then delete from database
+              case delete_blob(blob) do
+                {:ok, _deleted_blob} -> {:ok, :deleted}
+                {:error, reason} -> {:error, reason}
+              end
+
+            {:error, reason} ->
+              # Log error but continue - blob metadata will remain orphaned
+              require Logger
+              Logger.warning("Failed to delete blob from MinIO: #{inspect(reason)}")
+              {:error, :minio_delete_failed}
+          end
+      end
+    else
+      {:ok, :still_referenced}
+    end
+  end
+
+  @doc """
   Lists all blobs for a repository.
   """
   def list_blobs(repository_did) do

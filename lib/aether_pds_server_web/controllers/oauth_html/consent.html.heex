@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Authorize Access</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .container {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 480px;
+        width: 100%;
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 32px 24px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 24px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+
+      .header p {
+        font-size: 14px;
+        opacity: 0.9;
+      }
+
+      .content {
+        padding: 32px 24px;
+      }
+
+      .user-info {
+        background: #f7fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 24px;
+      }
+
+      .user-info .label {
+        font-size: 12px;
+        color: #718096;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .user-info .value {
+        font-size: 16px;
+        color: #2d3748;
+        font-weight: 500;
+      }
+
+      .client-info {
+        margin-bottom: 24px;
+      }
+
+      .client-info h2 {
+        font-size: 18px;
+        color: #2d3748;
+        margin-bottom: 12px;
+      }
+
+      .client-name {
+        font-size: 20px;
+        color: #667eea;
+        font-weight: 600;
+        margin-bottom: 16px;
+      }
+
+      .permissions {
+        background: #f7fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 24px;
+      }
+
+      .permissions h3 {
+        font-size: 14px;
+        color: #2d3748;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+
+      .permissions ul {
+        list-style: none;
+      }
+
+      .permissions li {
+        padding: 8px 0;
+        color: #4a5568;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+      }
+
+      .permissions li:before {
+        content: "✓";
+        color: #48bb78;
+        font-weight: bold;
+        margin-right: 12px;
+        font-size: 16px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      .btn {
+        flex: 1;
+        padding: 14px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-approve {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+
+      .btn-approve:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+
+      .btn-deny {
+        background: white;
+        color: #718096;
+        border: 2px solid #e2e8f0;
+      }
+
+      .btn-deny:hover {
+        background: #f7fafc;
+        border-color: #cbd5e0;
+      }
+
+      .warning {
+        background: #fef5e7;
+        border-left: 4px solid #f39c12;
+        padding: 12px;
+        margin-top: 16px;
+        border-radius: 4px;
+        font-size: 13px;
+        color: #7d6608;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Authorize Access</h1>
+        <p>Review and authorize this application</p>
+      </div>
+
+      <div class="content">
+        <div class="user-info">
+          <div class="label">Signed in as</div>
+          <div class="value"><%= @user.handle %></div>
+          <div style="font-size: 12px; color: #a0aec0; margin-top: 4px;"><%= @user.did %></div>
+        </div>
+
+        <div class="client-info">
+          <h2>Application requesting access:</h2>
+          <div class="client-name"><%= @client.name %></div>
+        </div>
+
+        <div class="permissions">
+          <h3>This application will be able to:</h3>
+          <ul>
+            <%= if String.contains?(@scope, "atproto") do %>
+              <li>Read and write to your AT Protocol repository</li>
+              <li>Create, update, and delete posts and records</li>
+              <li>Access your profile information</li>
+            <% end %>
+            <%= if String.contains?(@scope, "transition:chat.bsky") do %>
+              <li>Send and receive chat messages on your behalf</li>
+            <% end %>
+          </ul>
+        </div>
+
+        <form action="/oauth/authorize/consent" method="post">
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+          <div class="actions">
+            <button type="submit" name="approve" value="false" class="btn btn-deny">
+              Deny
+            </button>
+            <button type="submit" name="approve" value="true" class="btn btn-approve">
+              Authorize
+            </button>
+          </div>
+        </form>
+
+        <div class="warning">
+          ⚠️ Only authorize applications you trust. They will have access to your account.
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -102,11 +102,12 @@ defmodule AetherPDSServerWeb.OAuthController do
   """
   def login_page(conn, params) do
     client_name = Map.get(params, "client_id", "Unknown Application")
+    error = Phoenix.Flash.get(conn.assigns.flash, :error)
 
-    # Render login page (you'll need to create this template)
+    # Render login page
     conn
     |> put_layout(false)
-    |> render("login.html", client_name: client_name)
+    |> render(:login, client_name: client_name, error: error)
   end
 
   @doc """
@@ -464,17 +465,13 @@ defmodule AetherPDSServerWeb.OAuthController do
   end
 
   defp render_consent_page(conn, user, client, oauth_request) do
-    # For now, render a simple JSON response
-    # In production, you'd render an HTML consent page
+    # Render HTML consent page
     conn
     |> put_layout(false)
-    |> put_status(:ok)
-    |> json(%{
-      message: "Consent required",
-      user: %{handle: user.handle, did: user.did},
-      client: %{name: client.name, id: client.id},
-      scope: oauth_request.scope,
-      note: "POST to /oauth/authorize/consent with approve=true or approve=false"
-    })
+    |> render(:consent,
+      user: user,
+      client: client,
+      scope: oauth_request.scope
+    )
   end
 end

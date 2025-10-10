@@ -30,6 +30,70 @@ defmodule AetherPDSServer.MinioStorage do
   end
 
   @doc """
+  Download a blob from MinIO by storage_key.
+
+  Returns {:ok, binary_data} or {:error, reason}
+  """
+  def download_blob(storage_key) do
+    config = get_config()
+    bucket = config.bucket
+
+    operation = ExAws.S3.get_object(bucket, storage_key)
+
+    uri = URI.parse(config.endpoint)
+
+    ex_aws_config = [
+      access_key_id: config.access_key_id,
+      secret_access_key: config.secret_access_key,
+      region: config.region,
+      scheme: "#{uri.scheme}://",
+      host: uri.host,
+      port: uri.port
+    ]
+
+    case ExAws.request(operation, ex_aws_config) do
+      {:ok, %{body: body}} ->
+        {:ok, body}
+
+      {:error, reason} ->
+        Logger.error("MinIO download request failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Delete a blob from MinIO by storage_key.
+
+  Returns :ok or {:error, reason}
+  """
+  def delete_blob(storage_key) do
+    config = get_config()
+    bucket = config.bucket
+
+    operation = ExAws.S3.delete_object(bucket, storage_key)
+
+    uri = URI.parse(config.endpoint)
+
+    ex_aws_config = [
+      access_key_id: config.access_key_id,
+      secret_access_key: config.secret_access_key,
+      region: config.region,
+      scheme: "#{uri.scheme}://",
+      host: uri.host,
+      port: uri.port
+    ]
+
+    case ExAws.request(operation, ex_aws_config) do
+      {:ok, _response} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.error("MinIO delete request failed: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  @doc """
   Generate a unique storage key for a blob.
   Format: {did}/{uuid}
   """
