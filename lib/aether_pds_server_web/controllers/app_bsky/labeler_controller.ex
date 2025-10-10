@@ -373,7 +373,8 @@ defmodule AetherPDSServerWeb.AppBsky.LabelerController do
           %{
             lang: "en",
             name: "Illicit",
-            description: "Promoting or selling potentially illicit goods, services, or activities."
+            description:
+              "Promoting or selling potentially illicit goods, services, or activities."
           }
         ]
       },

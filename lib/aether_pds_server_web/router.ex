@@ -77,6 +77,10 @@ defmodule AetherPDSServerWeb.Router do
     get "/app.bsky.feed.searchPosts", AppBsky.FeedController, :search_posts
     post "/app.bsky.feed.sendInteractions", AppBsky.FeedController, :send_interactions
 
+    # App Bsky Graph - Public
+    get "/app.bsky.graph.getFollowers", AppBsky.GraphController, :get_followers
+    get "/app.bsky.graph.getFollows", AppBsky.GraphController, :get_follows
+
     # App Bsky Unspecced - Public
     get "/app.bsky.unspecced.getConfig", AppBsky.UnspeccedController, :get_config
     get "/app.bsky.unspecced.getPostThreadV2", AppBsky.UnspeccedController, :get_post_thread_v2
@@ -120,6 +124,15 @@ defmodule AetherPDSServerWeb.Router do
 
     # App Bsky Feed - Authenticated
     get "/app.bsky.feed.getTimeline", AppBsky.FeedController, :get_timeline
+
+    # App Bsky Graph - Authenticated
+    get "/app.bsky.graph.getBlocks", AppBsky.GraphController, :get_blocks
+    get "/app.bsky.graph.getMutes", AppBsky.GraphController, :get_mutes
+    get "/app.bsky.graph.getRelationships", AppBsky.GraphController, :get_relationships
+    post "/app.bsky.graph.muteActor", AppBsky.GraphController, :mute_actor
+    post "/app.bsky.graph.unmuteActor", AppBsky.GraphController, :unmute_actor
+    post "/app.bsky.graph.muteThread", AppBsky.GraphController, :mute_thread
+    post "/app.bsky.graph.unmuteThread", AppBsky.GraphController, :unmute_thread
 
     # Session Management
     get "/com.atproto.server.getSession", ComATProto.ServerController, :get_session

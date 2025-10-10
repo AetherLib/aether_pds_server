@@ -250,7 +250,8 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
       account ->
         # Get posts from the author
-        {feed_items, next_cursor} = get_author_posts(account.did, limit, cursor, filter, current_did)
+        {feed_items, next_cursor} =
+          get_author_posts(account.did, limit, cursor, filter, current_did)
 
         response = %{feed: feed_items}
         response = if next_cursor, do: Map.put(response, :cursor, next_cursor), else: response
@@ -397,7 +398,8 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
             |> Enum.map(fn record ->
               %{
                 indexedAt: format_timestamp(DateTime.utc_now()),
-                createdAt: Map.get(record.value, "createdAt", format_timestamp(DateTime.utc_now())),
+                createdAt:
+                  Map.get(record.value, "createdAt", format_timestamp(DateTime.utc_now())),
                 actor: get_author_profile(account.did, current_did)
               }
             end)
@@ -572,7 +574,8 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
             |> Enum.map(fn record ->
               %{
                 indexedAt: format_timestamp(DateTime.utc_now()),
-                createdAt: Map.get(record.value, "createdAt", format_timestamp(DateTime.utc_now())),
+                createdAt:
+                  Map.get(record.value, "createdAt", format_timestamp(DateTime.utc_now())),
                 actor: get_author_profile(account.did, current_did)
               }
             end)
@@ -721,7 +724,10 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
           # Sort by engagement (likes + reposts + replies)
           Enum.sort_by(posts, fn {_ts, record} ->
             uri = "at://#{record.repository_did}/#{record.collection}/#{record.rkey}"
-            {reply_count, repost_count, like_count, _quote_count} = get_post_engagement_counts(uri)
+
+            {reply_count, repost_count, like_count, _quote_count} =
+              get_post_engagement_counts(uri)
+
             -(reply_count + repost_count + like_count)
           end)
 
@@ -811,12 +817,15 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     # Sort by timestamp (most recent first)
     sorted_items =
       timeline_items
-      |> Enum.sort_by(fn item ->
-        case item do
-          {:post, record} -> get_post_timestamp(record)
-          {:repost, repost_record, _original_post} -> get_post_timestamp(repost_record)
-        end
-      end, {:desc, DateTime})
+      |> Enum.sort_by(
+        fn item ->
+          case item do
+            {:post, record} -> get_post_timestamp(record)
+            {:repost, repost_record, _original_post} -> get_post_timestamp(repost_record)
+          end
+        end,
+        {:desc, DateTime}
+      )
 
     # Paginate
     items_to_return = Enum.take(sorted_items, limit)
@@ -827,8 +836,11 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
         last_item = List.last(items_to_return)
 
         case last_item do
-          {:post, record} -> get_post_timestamp(record) |> DateTime.to_iso8601()
-          {:repost, repost_record, _} -> get_post_timestamp(repost_record) |> DateTime.to_iso8601()
+          {:post, record} ->
+            get_post_timestamp(record) |> DateTime.to_iso8601()
+
+          {:repost, repost_record, _} ->
+            get_post_timestamp(repost_record) |> DateTime.to_iso8601()
         end
       else
         nil
@@ -1257,10 +1269,10 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
               {:ok, {parent_did, _, _}} -> parent_did == did
               _ -> false
             end ||
-            case parse_at_uri(root_uri) do
-              {:ok, {root_did, _, _}} -> root_did == did
-              _ -> false
-            end
+              case parse_at_uri(root_uri) do
+                {:ok, {root_did, _, _}} -> root_did == did
+                _ -> false
+              end
 
           is_self_thread
       end
@@ -1368,7 +1380,8 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
 
       threadgate_record ->
         threadgate = %{
-          uri: "at://#{threadgate_record.repository_did}/#{threadgate_record.collection}/#{threadgate_record.rkey}",
+          uri:
+            "at://#{threadgate_record.repository_did}/#{threadgate_record.collection}/#{threadgate_record.rkey}",
           cid: threadgate_record.cid,
           record: threadgate_record.value,
           lists: []

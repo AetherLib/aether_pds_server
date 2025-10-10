@@ -88,13 +88,15 @@ defmodule AetherPDSServerWeb.AppBsky.UnspeccedController do
     case Repositories.get_record(repo_did, collection, rkey) do
       nil ->
         # Anchor post not found
-        [%{
-          uri: uri,
-          depth: 0,
-          value: %{
-            "$type" => "app.bsky.unspecced.defs#threadItemNotFound"
+        [
+          %{
+            uri: uri,
+            depth: 0,
+            value: %{
+              "$type" => "app.bsky.unspecced.defs#threadItemNotFound"
+            }
           }
-        }]
+        ]
 
       anchor_post ->
         thread_items = []
@@ -113,11 +115,16 @@ defmodule AetherPDSServerWeb.AppBsky.UnspeccedController do
 
         # Add anchor post at depth 0
         anchor_value = build_thread_item_post(anchor_post, is_op_thread: is_op)
-        thread_items = thread_items ++ [%{
-          uri: uri,
-          depth: 0,
-          value: anchor_value
-        }]
+
+        thread_items =
+          thread_items ++
+            [
+              %{
+                uri: uri,
+                depth: 0,
+                value: anchor_value
+              }
+            ]
 
         # Add replies if requested (positive depth)
         thread_items =
@@ -138,13 +145,15 @@ defmodule AetherPDSServerWeb.AppBsky.UnspeccedController do
       {:ok, {repo_did, collection, rkey}} ->
         case Repositories.get_record(repo_did, collection, rkey) do
           nil ->
-            [%{
-              uri: parent_uri,
-              depth: depth,
-              value: %{
-                "$type" => "app.bsky.unspecced.defs#threadItemNotFound"
+            [
+              %{
+                uri: parent_uri,
+                depth: depth,
+                value: %{
+                  "$type" => "app.bsky.unspecced.defs#threadItemNotFound"
+                }
               }
-            }]
+            ]
 
           post ->
             current_item = %{
@@ -163,20 +172,23 @@ defmodule AetherPDSServerWeb.AppBsky.UnspeccedController do
         end
 
       {:error, _} ->
-        [%{
-          uri: parent_uri,
-          depth: depth,
-          value: %{
-            "$type" => "app.bsky.unspecced.defs#threadItemNotFound"
+        [
+          %{
+            uri: parent_uri,
+            depth: depth,
+            value: %{
+              "$type" => "app.bsky.unspecced.defs#threadItemNotFound"
+            }
           }
-        }]
+        ]
     end
   end
 
   defp collect_parents(_, _), do: []
 
   # Collect reply posts (positive depth)
-  defp collect_replies(_repo_did, _collection, _rkey, current_depth, max_depth) when current_depth > max_depth do
+  defp collect_replies(_repo_did, _collection, _rkey, current_depth, max_depth)
+       when current_depth > max_depth do
     []
   end
 
@@ -204,7 +216,13 @@ defmodule AetherPDSServerWeb.AppBsky.UnspeccedController do
           # Recursively get nested replies if within depth limit
           nested_replies =
             if current_depth < max_depth do
-              collect_replies(repo_did, reply.collection, reply.rkey, current_depth + 1, max_depth)
+              collect_replies(
+                repo_did,
+                reply.collection,
+                reply.rkey,
+                current_depth + 1,
+                max_depth
+              )
             else
               []
             end

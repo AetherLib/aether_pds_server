@@ -52,9 +52,27 @@ A Personal Data Server (PDS) implementation for the AT Protocol (ATProto), built
 - ✅ Service endpoint extraction
 - ⚠️ **Missing**: Relay integration, firehose subscriptions, commit verification
 
+**App.bsky Endpoints** (✅ 80% Complete)
+- ✅ Feed endpoints (timeline, author feed, post thread, search, likes, reposts)
+- ✅ Actor endpoints (profiles, search, preferences)
+- ✅ Labeler endpoints (moderation service discovery)
+- ✅ Engagement tracking (likes, reposts, replies, quotes)
+- ✅ Viewer state (follow status, like/repost status)
+- ⚠️ **Missing**: Feed generators execution, list feeds, suggested feeds
+
 ### 📋 Roadmap
 
-**Phase 1: Federation Core** (✅ 60% Complete)
+**Phase 1: App.bsky Social Features** (✅ 80% Complete)
+- [x] Feed endpoints (timeline, author feed, post thread)
+- [x] Actor endpoints (profiles, search, preferences)
+- [x] Labeler endpoints (moderation service)
+- [x] Engagement tracking (likes, reposts, replies)
+- [x] Viewer state (relationships, interactions)
+- [ ] Feed generators (execution engine)
+- [ ] List feeds and suggested feeds
+- [ ] Graph endpoints (blocks, mutes)
+
+**Phase 2: Federation Core** (✅ 60% Complete)
 - [x] DID resolution (plc.directory integration)
 - [x] Handle resolution (HTTPS + DNS)
 - [x] DID document generation
@@ -65,21 +83,21 @@ A Personal Data Server (PDS) implementation for the AT Protocol (ATProto), built
 - [ ] AppView subscriptions
 - [ ] Firehose event stream subscriptions
 
-**Phase 2: Performance & Reliability**
+**Phase 3: Performance & Reliability**
 - [ ] Redis caching layer
 - [ ] Background job processing (Oban)
-- [ ] Database query optimization
+- [ ] Database query optimization (feed queries, engagement counts)
 - [ ] Token cleanup automation
 - [ ] Blob garbage collection
 
-**Phase 3: Security Enhancements**
+**Phase 4: Security Enhancements**
 - [ ] Rate limiting
 - [ ] Email verification
 - [ ] Account recovery flows
 - [ ] Multi-client OAuth support
 - [ ] IP-based access controls
 
-**Phase 4: Data Management**
+**Phase 5: Data Management**
 - [ ] Object storage integration (S3/MinIO/local filesystem)
 - [ ] Blob retrieval endpoints
 - [ ] Proper CIDv1 generation with multihash
@@ -92,14 +110,14 @@ A Personal Data Server (PDS) implementation for the AT Protocol (ATProto), built
 - [ ] Data retention policies
 - [ ] Blob virus scanning
 
-**Phase 5: Observability**
+**Phase 6: Observability**
 - [ ] Prometheus metrics
 - [ ] Structured logging
 - [ ] Admin dashboard
 - [ ] Audit logging
 - [ ] Performance monitoring
 
-**Phase 6: Developer Experience**
+**Phase 7: Developer Experience**
 - [ ] OpenAPI documentation
 - [ ] Client SDK generation
 - [ ] GraphQL API layer
@@ -201,6 +219,21 @@ Tests account creation → repository creation → record CRUD → CAR export. R
 - Validation
 - Service endpoint management
 
+**App.bsky Controllers**
+- **FeedController** (`lib/aether_pds_server_web/controllers/app_bsky/feed_controller.ex`)
+  - Timeline feeds (getTimeline)
+  - Author feeds (getAuthorFeed)
+  - Post threads (getPostThread)
+  - Feed search (searchPosts)
+  - Engagement (getLikes, getRepostedBy)
+- **ActorController** (`lib/aether_pds_server_web/controllers/app_bsky/actor_controller.ex`)
+  - Profile views (getProfile, getProfiles)
+  - Actor search (searchActors, searchActorsTypeahead)
+  - Preferences (getPreferences, putPreferences)
+- **LabelerController** (`lib/aether_pds_server_web/controllers/app_bsky/labeler_controller.ex`)
+  - Moderation service discovery (getServices)
+  - Label policies and definitions
+
 ### API Structure
 
 **Public Endpoints** (no auth required)
@@ -209,12 +242,17 @@ Tests account creation → repository creation → record CRUD → CAR export. R
 - Repository reads
 - Sync protocol endpoints
 - Identity resolution
+- Actor profiles and search
+- Feed views (public posts)
 
 **Authenticated Endpoints** (require access token)
 - Session management
 - Repository writes
 - Record operations
 - Blob uploads
+- Timeline feeds
+- Preferences
+- Engagement actions
 
 **Admin Endpoints** (require admin privileges)
 - Sync administration
@@ -326,4 +364,4 @@ mix test --failed
 
 ---
 
-**Status**: Active Development | **Version**: 0.1.1
+**Status**: Active Development | **Version**: 0.2.0 | **Phase**: App.bsky Social Features (80% Complete)
