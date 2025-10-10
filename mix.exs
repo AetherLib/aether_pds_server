@@ -57,7 +57,10 @@ defmodule AetherPDSServer.MixProject do
       {:jose, "~> 1.11"},
       {:argon2_elixir, "~> 4.0"},
       {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
-      {:corsica, "~> 2.1"}
+      {:corsica, "~> 2.1"},
+      {:ex_aws, "~> 2.5"},
+      {:ex_aws_s3, "~> 2.5"},
+      {:hackney, "~> 1.20"}
     ]
   end
 

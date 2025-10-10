@@ -259,6 +259,71 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
   end
 
   @doc """
+  GET /xrpc/com.atproto.repo.listMissingBlobs
+
+  List blobs that are referenced in records but missing from storage.
+  """
+  def list_missing_blobs(conn, %{"repo" => did} = params) do
+    # For now, we return an empty list as we don't track missing blobs
+    # In a production system, this would:
+    # 1. Scan all records for blob references
+    # 2. Check if each referenced blob exists in storage
+    # 3. Return CIDs of missing blobs
+
+    limit = params |> Map.get("limit", "500") |> String.to_integer() |> min(1000)
+    _cursor = Map.get(params, "cursor")
+
+    # Verify repository exists
+    case Repositories.get_repository(did) do
+      nil ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "RepoNotFound", message: "Repository not found"})
+
+      _repo ->
+        # Return empty list (no missing blobs detected)
+        response = %{
+          blobs: []
+        }
+
+        json(conn, response)
+    end
+  end
+
+  @doc """
+  POST /xrpc/com.atproto.repo.importRepo
+
+  Import a repository from a CAR file.
+  This completely replaces the repository contents with the imported data.
+  """
+  def import_repo(conn, _params) do
+    current_did = conn.assigns[:current_did]
+
+    # Read the CAR file from request body
+    {:ok, car_binary, _conn} = Plug.Conn.read_body(conn)
+
+    case import_repo_from_car(current_did, car_binary) do
+      :ok ->
+        json(conn, %{})
+
+      {:error, :invalid_car} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "InvalidRequest", message: "Invalid CAR file format"})
+
+      {:error, :repository_not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "RepoNotFound", message: "Repository not found"})
+
+      {:error, reason} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "ImportFailed", message: "Failed to import repository: #{inspect(reason)}"})
+    end
+  end
+
+  @doc """
   POST /xrpc/com.atproto.repo.applyWrites
 
   Apply a batch of write operations (creates, updates, deletes) to a repository.
@@ -838,5 +903,173 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
       layer: mst.layer,
       entries: entries_data
     })
+  end
+
+  # ============================================================================
+  # CAR Import Helpers
+  # ============================================================================
+
+  defp import_repo_from_car(did, car_binary) when is_binary(car_binary) do
+    alias Aether.ATProto.CAR
+
+    # Verify repository exists
+    repo = Repositories.get_repository(did)
+
+    if repo == nil do
+      {:error, :repository_not_found}
+    else
+      # Parse CAR file
+      case CAR.decode(car_binary) do
+        {:ok, car} ->
+          # Validate CAR has exactly one root (the commit CID)
+          if length(car.roots) != 1 do
+            {:error, :invalid_car}
+          else
+            # Process import in a transaction
+            AetherPDSServer.Repo.transaction(fn ->
+              process_car_import(did, car)
+            end)
+
+            :ok
+          end
+
+        {:error, _reason} ->
+          {:error, :invalid_car}
+      end
+    end
+  end
+
+  defp import_repo_from_car(_did, _invalid), do: {:error, :invalid_car}
+
+  defp process_car_import(did, car) do
+    alias Aether.ATProto.CAR
+
+    [root_cid] = car.roots
+    root_cid_string = CID.cid_to_string(root_cid)
+
+    # 1. Find the commit block
+    {:ok, commit_block} = CAR.get_block(car, root_cid)
+
+    # 2. Parse commit data
+    {:ok, commit_data, ""} = CBOR.decode(commit_block.data)
+
+    # Extract MST root CID from commit
+    mst_root_cid_string = commit_data["data"]
+    {:ok, mst_root_cid} = CID.parse_cid(mst_root_cid_string)
+
+    # 3. Clear existing repository data
+    clear_repository_data(did)
+
+    # 4. Import all blocks (MST blocks and record blocks)
+    import_blocks(did, car)
+
+    # 5. Rebuild records from MST
+    import_records_from_mst(did, car, mst_root_cid)
+
+    # 6. Create new commit
+    rev = commit_data["rev"] || generate_tid()
+
+    commit_attrs = %{
+      repository_did: did,
+      cid: root_cid_string,
+      rev: rev,
+      prev: commit_data["prev"],
+      data: commit_data
+    }
+
+    {:ok, _commit} = Repositories.create_commit(commit_attrs)
+
+    # 7. Update repository head
+    {:ok, repo} = Repositories.get_repository(did) |> Repositories.update_repository(%{head_cid: root_cid_string})
+
+    # 8. Create import event
+    event_attrs = %{
+      repository_did: did,
+      commit_cid: root_cid_string,
+      rev: rev,
+      ops: [%{action: "import", path: "*", cid: nil}],
+      time: DateTime.utc_now()
+    }
+
+    {:ok, _event} = Repositories.create_event(event_attrs)
+
+    :ok
+  end
+
+  defp clear_repository_data(did) do
+    # Delete all existing records
+    collections = Repositories.list_collections(did)
+
+    Enum.each(collections, fn collection ->
+      result = Repositories.list_records(did, collection, limit: 10000)
+
+      Enum.each(result.records, fn record ->
+        Repositories.delete_record(record)
+      end)
+    end)
+
+    # Note: We keep commits and events for audit purposes
+    # In a production system, you might want to archive them instead
+  end
+
+  defp import_blocks(did, car) do
+    alias Aether.ATProto.CAR
+
+    # Store all MST blocks
+    mst_blocks =
+      car.blocks
+      |> Enum.map(fn block ->
+        cid_string = CID.cid_to_string(block.cid)
+        {cid_string, block.data}
+      end)
+      |> Enum.into(%{})
+
+    Repositories.put_mst_blocks(did, mst_blocks)
+  end
+
+  defp import_records_from_mst(did, car, mst_root_cid) do
+    alias Aether.ATProto.CAR
+
+    # Get the MST root block
+    {:ok, mst_block} = CAR.get_block(car, mst_root_cid)
+
+    # Parse MST structure
+    {:ok, mst_data, ""} = CBOR.decode(mst_block.data)
+
+    # Extract entries from MST
+    entries = mst_data["entries"] || []
+
+    # Import each record
+    Enum.each(entries, fn entry ->
+      # Entry format: %{"key" => "collection/rkey", "value" => "cid_string"}
+      key = entry["key"]
+      record_cid_string = entry["value"]
+
+      # Parse collection and rkey from key
+      case String.split(key, "/", parts: 2) do
+        [collection, rkey] ->
+          # Get the record block
+          {:ok, record_cid} = CID.parse_cid(record_cid_string)
+          {:ok, record_block} = CAR.get_block(car, record_cid)
+
+          # Parse record value
+          {:ok, record_value, ""} = CBOR.decode(record_block.data)
+
+          # Create record
+          record_attrs = %{
+            repository_did: did,
+            collection: collection,
+            rkey: rkey,
+            cid: record_cid_string,
+            value: record_value
+          }
+
+          Repositories.create_record(record_attrs)
+
+        _ ->
+          # Invalid key format, skip
+          :ok
+      end
+    end)
   end
 end

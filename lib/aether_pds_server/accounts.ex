@@ -7,6 +7,7 @@ defmodule AetherPDSServer.Accounts do
   alias AetherPDSServer.Repo
   alias AetherPDSServer.Repositories
   alias AetherPDSServer.Accounts.Account
+  alias AetherPDSServer.Accounts.AppPassword
   alias AetherPDSServer.OAuth
 
   # ============================================================================
@@ -189,10 +190,19 @@ defmodule AetherPDSServer.Accounts do
         {:error, :invalid_credentials}
 
       account ->
-        if verify_password(password, account.password_hash) do
-          {:ok, account}
-        else
-          {:error, :invalid_credentials}
+        # Check account status
+        cond do
+          account.status == "deleted" ->
+            {:error, :account_deleted}
+
+          account.status == "deactivated" ->
+            {:error, :account_deactivated}
+
+          verify_password(password, account.password_hash) ->
+            {:ok, account}
+
+          true ->
+            {:error, :invalid_credentials}
         end
     end
   end
@@ -307,5 +317,231 @@ defmodule AetherPDSServer.Accounts do
       |> String.slice(0..23)
 
     "did:plc:#{identifier}"
+  end
+
+  # ============================================================================
+  # App Password Management
+  # ============================================================================
+
+  @doc """
+  Create an app password for an account.
+
+  Returns the created app password struct with the plaintext password.
+  The plaintext password is only returned once at creation time.
+  """
+  def create_app_password(account_id, attrs) when is_integer(account_id) do
+    # Generate a random app password if not provided
+    password = Map.get(attrs, :password) || generate_app_password()
+
+    attrs_with_password =
+      attrs
+      |> Map.put(:account_id, account_id)
+      |> Map.put(:password, password)
+
+    result =
+      %AppPassword{}
+      |> AppPassword.create_changeset(attrs_with_password)
+      |> Repo.insert()
+
+    case result do
+      {:ok, app_password} ->
+        # Return app password with plaintext password for one-time display
+        {:ok, %{app_password | password: password}}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  List all app passwords for an account.
+
+  Does not include password hashes or plaintext passwords.
+  """
+  def list_app_passwords(account_id) when is_integer(account_id) do
+    import Ecto.Query
+
+    Repo.all(
+      from ap in AppPassword,
+        where: ap.account_id == ^account_id,
+        order_by: [desc: ap.created_at],
+        select: %{
+          name: ap.name,
+          created_at: ap.created_at,
+          privileged: ap.privileged
+        }
+    )
+  end
+
+  @doc """
+  Revoke (delete) an app password by name for an account.
+  """
+  def revoke_app_password(account_id, name) when is_integer(account_id) and is_binary(name) do
+    import Ecto.Query
+
+    case Repo.get_by(AppPassword, account_id: account_id, name: name) do
+      nil ->
+        {:error, :not_found}
+
+      app_password ->
+        Repo.delete(app_password)
+    end
+  end
+
+  @doc """
+  Authenticate a user by handle/email and app password.
+
+  Returns {:ok, account} if authentication succeeds.
+  """
+  def authenticate_with_app_password(identifier, password) do
+    import Ecto.Query
+
+    # Try to find by handle or email
+    account =
+      cond do
+        String.contains?(identifier, "@") ->
+          get_account_by_email(identifier)
+
+        true ->
+          get_account_by_handle(identifier)
+      end
+
+    case account do
+      nil ->
+        # Run hash to prevent timing attacks
+        Argon2.no_user_verify()
+        {:error, :invalid_credentials}
+
+      account ->
+        # Check if password matches any app password
+        app_password =
+          Repo.one(
+            from ap in AppPassword,
+              where: ap.account_id == ^account.id
+          )
+
+        case app_password do
+          nil ->
+            {:error, :invalid_credentials}
+
+          app_password ->
+            if verify_password(password, app_password.password_hash) do
+              {:ok, account}
+            else
+              {:error, :invalid_credentials}
+            end
+        end
+    end
+  end
+
+  @doc """
+  Generate a random app password.
+
+  Format: xxxx-xxxx-xxxx-xxxx (4 groups of 4 alphanumeric characters)
+  """
+  defp generate_app_password do
+    chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+
+    1..4
+    |> Enum.map(fn _ ->
+      1..4
+      |> Enum.map(fn _ ->
+        String.at(chars, :rand.uniform(String.length(chars)) - 1)
+      end)
+      |> Enum.join()
+    end)
+    |> Enum.join("-")
+  end
+
+  # ============================================================================
+  # Account Lifecycle Management
+  # ============================================================================
+
+  @doc """
+  Deactivate an account.
+
+  Deactivated accounts cannot authenticate but can be reactivated.
+  """
+  def deactivate_account(did) when is_binary(did) do
+    case get_account_by_did(did) do
+      nil ->
+        {:error, :account_not_found}
+
+      account ->
+        account
+        |> Account.changeset(%{
+          status: "deactivated",
+          deactivated_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+        })
+        |> Repo.update()
+    end
+  end
+
+  @doc """
+  Activate a previously deactivated account.
+  """
+  def activate_account(did) when is_binary(did) do
+    case get_account_by_did(did) do
+      nil ->
+        {:error, :account_not_found}
+
+      account ->
+        if account.status == "deleted" do
+          {:error, :account_deleted}
+        else
+          account
+          |> Account.changeset(%{
+            status: "active",
+            deactivated_at: nil
+          })
+          |> Repo.update()
+        end
+    end
+  end
+
+  @doc """
+  Delete an account permanently.
+
+  This marks the account as deleted but doesn't remove it from the database.
+  Deleted accounts cannot be reactivated.
+  """
+  def delete_account(did, password) when is_binary(did) and is_binary(password) do
+    case get_account_by_did(did) do
+      nil ->
+        {:error, :account_not_found}
+
+      account ->
+        # Verify password before deletion
+        if verify_password(password, account.password_hash) do
+          account
+          |> Account.changeset(%{
+            status: "deleted",
+            deactivated_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+          })
+          |> Repo.update()
+        else
+          {:error, :invalid_password}
+        end
+    end
+  end
+
+  @doc """
+  Check if an account is active.
+  """
+  def account_active?(did) when is_binary(did) do
+    case get_account_by_did(did) do
+      nil -> false
+      account -> account.status == "active"
+    end
+  end
+
+  @doc """
+  Get account status.
+  """
+  def get_account_status(did) when is_binary(did) do
+    case get_account_by_did(did) do
+      nil -> {:error, :account_not_found}
+      account -> {:ok, account.status}
+    end
   end
 end

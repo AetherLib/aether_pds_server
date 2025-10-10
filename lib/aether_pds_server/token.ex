@@ -55,6 +55,16 @@ defmodule AetherPDSServer.Token do
     end
   end
 
+  @doc """
+  Generate a service authentication token with custom claims
+  """
+  def generate_service_token(claims) do
+    signer = get_signer()
+
+    # Use empty config (no validators)
+    Joken.generate_and_sign(%{}, claims, signer)
+  end
+
   defp get_signer do
     Joken.Signer.create("HS256", get_secret())
   end

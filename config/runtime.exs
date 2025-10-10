@@ -20,6 +20,16 @@ if System.get_env("PHX_SERVER") do
   config :aether_pds_server, AetherPDSServerWeb.Endpoint, server: true
 end
 
+# MinIO/S3 Configuration for blob storage (only for dev/prod, test uses hardcoded values)
+if config_env() != :test do
+  config :aether_pds_server, :minio,
+    endpoint: System.get_env("AWS_HOST") || "http://localhost:9002",
+    bucket: System.get_env("AWS_BUCKET") || "atproto-blobs",
+    access_key_id: System.get_env("AWS_ACCESS_KEY_ID"),
+    secret_access_key: System.get_env("AWS_SECRET_ACCESS_KEY"),
+    region: System.get_env("AWS_REGION") || "us-east-1"
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

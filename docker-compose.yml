@@ -1,4 +1,21 @@
 services:
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - aether_pds_server_dev_minio_data:/data
+    ports:
+      - "9002:9002"
+      - "9001:9001"
+    command: server /data --address ":9002" --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9002/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
   db:
     image: docker.io/postgres:17.4-bullseye
     environment:
@@ -11,4 +28,4 @@ services:
 
 volumes:
   aether_pds_server_dev_data:
-  aether_pds_server_dev_clickhouse_data:
+  aether_pds_server_dev_minio_data:

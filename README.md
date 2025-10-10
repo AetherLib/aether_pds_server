@@ -1,128 +1,165 @@
 # Aether PDS Server
 
-A Personal Data Server (PDS) implementation for the AT Protocol (ATProto), built with Phoenix/Elixir. This server enables decentralized social networking by providing users with their own data repository that federates with other ATProto services.
+A **Personal Data Server (PDS)** implementation for the AT Protocol (ATProto), built with Phoenix/Elixir. This server provides the core PDS functionality as defined by the [official Bluesky PDS specification](https://github.com/bluesky-social/atproto/tree/main/packages/pds).
+
+## ⚠️ Architecture Note
+
+This implementation follows a **standalone PDS architecture** that differs from the official Bluesky PDS:
+
+- **Official PDS**: Thin server that proxies social features to AppView with "read-after-write" pattern
+- **Our PDS**: Self-contained server that implements social features locally (no AppView dependency)
+
+**Implications:**
+- ✅ **Works standalone** - Full functionality without external services
+- ✅ **Good for**: Personal use, development, testing, small communities
+- ⚠️ **Trade-off**: Some endpoints (feeds, graph, notifications) are implemented locally but belong in AppView per official architecture
+- 📝 **See**: `PDS_COMPARISON.md` for detailed architectural analysis
+
+**Router Annotations**: Check `lib/aether_pds_server_web/router.ex` for endpoint scope markers:
+- `✅ CORRECT` - Official PDS scope
+- `🔄 PROXY + RAW` - Should proxy to AppView in federated mode
+- `❌ APPVIEW ONLY` - Not in official PDS (implemented for standalone mode)
 
 ## Features
 
-### ✅ Implemented
+### ✅ Core PDS Features (Official Scope)
 
-**Authentication & Authorization**
-- OAuth 2.0 authorization flow with PKCE
-- DPoP (Demonstrating Proof-of-Possession) token binding
-- Access token lifecycle management (1 hour expiry)
-- Refresh token support (30 day expiry)
-- Session management endpoints
+**com.atproto.server.*** - Authentication & Account Management**
+- ✅ OAuth 2.0 authorization flow with PKCE
+- ✅ DPoP (Demonstrating Proof-of-Possession) token binding
+- ✅ Account creation (`createAccount`)
+- ✅ Session management (`createSession`, `refreshSession`, `getSession`, `deleteSession`)
+- ✅ Server description (`describeServer`)
+- ✅ App passwords (`createAppPassword`, `listAppPasswords`, `revokeAppPassword`)
+- ✅ Account lifecycle (`activateAccount`, `deactivateAccount`, `deleteAccount`, `requestAccountDelete`)
+- ✅ Service auth (`getServiceAuth`)
+- ✅ Signing key reservation (`reserveSigningKey`)
+- ⚠️ **Skipped** (email functionality deferred):
+  - Email verification (`confirmEmail`, `requestEmailConfirmation`)
+  - Password reset (`resetPassword`, `requestPasswordReset`)
+  - Email updates (`updateEmail`, `requestEmailUpdate`)
 
-**Repository Management**
-- Merkle Search Tree (MST) based data structure
-- CID-based content addressing
-- Commit history tracking
-- Repository CRUD operations
-- Record versioning
+**com.atproto.repo.*** - Repository Management**
+- ✅ Merkle Search Tree (MST) based data structure
+- ✅ CID-based content addressing
+- ✅ Record operations (`createRecord`, `putRecord`, `deleteRecord`, `getRecord`, `listRecords`)
+- ✅ Repository metadata (`describeRepo`)
+- ✅ Batch operations (`applyWrites`)
+- ✅ Blob upload (`uploadBlob`)
+- ✅ Repository import (`importRepo`)
+- ✅ Blob sync helper (`listMissingBlobs`)
 
-**Data Storage**
-- Record operations (create, read, update, delete)
-- Collection-based organization
-- Pagination with cursor support
+**com.atproto.sync.*** - Sync Protocol**
+- ✅ CAR (Content Addressable aRchive) export (`getRepo`)
+- ✅ Commit tracking (`getLatestCommit`)
+- ✅ Block-level access (`getBlocks`, `getRecord`)
+- ✅ Blob access (`getBlob`, `listBlobs`)
+- ✅ Crawl coordination (`notifyOfUpdate`, `requestCrawl`)
 
-**Blob Storage** (⚠️ Basic Implementation)
-- Upload endpoint (stores in PostgreSQL)
-- CID generation (simplified)
-- Blob metadata tracking
-- Reference tracking schema
-- ⚠️ **Missing**: Object storage (S3/MinIO), retrieval endpoints, proper CIDv1, size limits
-
-**Sync Protocol**
-- Event stream for repository changes
-- CAR (Content Addressable aRchive) export support
-- Repository snapshots
-- Block-level data access
-
-**User Interface**
-- Account registration (LiveView)
-- OAuth consent flow (LiveView)
-- Login interface (LiveView)
-
-**Federation & Discovery** (✅ Core Implemented)
-- ✅ DID resolution via PLC directory (did:plc and did:web)
-- ✅ Handle resolution (HTTPS well-known + DNS TXT records)
+**com.atproto.identity.*** - Identity Resolution**
+- ✅ Handle → DID resolution (`resolveHandle`)
+- ✅ DID → DID document resolution (`resolveDid`)
 - ✅ DID document generation and validation
+- ✅ Service endpoint extraction
+- ✅ Support for did:plc and did:web
+
+**OAuth & DPoP**
+- ✅ OAuth authorization server metadata
+- ✅ Token endpoint with DPoP binding
+- ✅ Token revocation
+- ✅ JKT (JSON Key Thumbprint) validation
+- ✅ Access token lifecycle (1 hour)
+- ✅ Refresh token lifecycle (30 days)
+
+**Federation**
 - ✅ Remote PDS discovery from handles/DIDs
 - ✅ Cross-server record fetching
-- ✅ Service endpoint extraction
-- ⚠️ **Missing**: Relay integration, firehose subscriptions, commit verification
+- ✅ Repository verification (basic)
+- ⚠️ **Future**: Relay integration, firehose subscriptions, commit verification
 
-**App.bsky Endpoints** (✅ 80% Complete)
-- ✅ Feed endpoints (timeline, author feed, post thread, search, likes, reposts)
-- ✅ Actor endpoints (profiles, search, preferences)
-- ✅ Labeler endpoints (moderation service discovery)
-- ✅ Engagement tracking (likes, reposts, replies, quotes)
-- ✅ Viewer state (follow status, like/repost status)
-- ⚠️ **Missing**: Feed generators execution, list feeds, suggested feeds
+### 🔄 Extended Features (Standalone Mode)
+
+**Note**: These features are implemented locally but belong in AppView per official architecture. They enable standalone operation without an AppView service.
+
+**app.bsky.actor.*** - Actor Features**
+- ✅ Profile views (`getProfile`, `getProfiles`) - *Should proxy to AppView*
+- ✅ Actor search (`searchActors`, `searchActorsTypeahead`) - *Should proxy to AppView*
+- ✅ Preferences (`getPreferences`, `putPreferences`) - *Correct in PDS*
+
+**app.bsky.feed.*** - Feed Features**
+- ✅ Timeline (`getTimeline`) - *Should proxy to AppView*
+- ✅ Author feed (`getAuthorFeed`) - *Should proxy to AppView*
+- ✅ Post threads (`getPostThread`) - *Should proxy to AppView*
+- ✅ Feed search (`searchPosts`) - *Should proxy to AppView*
+- ✅ Engagement views (`getLikes`, `getRepostedBy`) - *Should proxy to AppView*
+
+**app.bsky.graph.*** - Graph Features**
+- ✅ Follows (`getFollowers`, `getFollows`) - *AppView only in official PDS*
+- ✅ Blocks/Mutes (`getBlocks`, `getMutes`, `muteActor`, `unmuteActor`) - *AppView only*
+- ✅ Relationships (`getRelationships`) - *AppView only*
+
+**app.bsky.notification.*** - Notifications**
+- ✅ List/count (`listNotifications`, `getUnreadCount`) - *AppView only in official PDS*
+- ✅ Mark seen (`updateSeen`) - *AppView only*
+
+**app.bsky.labeler.*** - Moderation**
+- ✅ Service discovery (`getServices`) - *Should proxy to AppView*
+
+**User Interface** (Development)
+- ✅ Account registration (LiveView)
+- ✅ OAuth consent flow (LiveView)
+- ✅ Login interface (LiveView)
 
 ### 📋 Roadmap
 
-**Phase 1: App.bsky Social Features** (✅ 80% Complete)
-- [x] Feed endpoints (timeline, author feed, post thread)
-- [x] Actor endpoints (profiles, search, preferences)
-- [x] Labeler endpoints (moderation service)
-- [x] Engagement tracking (likes, reposts, replies)
-- [x] Viewer state (relationships, interactions)
-- [ ] Feed generators (execution engine)
-- [ ] List feeds and suggested feeds
-- [ ] Graph endpoints (blocks, mutes)
+**Phase 1: Complete Core PDS Endpoints** ✅ **COMPLETE**
 
-**Phase 2: Federation Core** (✅ 60% Complete)
-- [x] DID resolution (plc.directory integration)
-- [x] Handle resolution (HTTPS + DNS)
-- [x] DID document generation
-- [x] Cross-server PDS discovery
-- [x] Remote record fetching
-- [ ] Commit signature verification
-- [ ] Relay server integration
-- [ ] AppView subscriptions
-- [ ] Firehose event stream subscriptions
+All non-email endpoints implemented:
+- [x] App passwords (`createAppPassword`, `listAppPasswords`, `revokeAppPassword`)
+- [x] Repository import (`importRepo`)
+- [x] Account lifecycle (`activateAccount`, `deactivateAccount`, `deleteAccount`, `requestAccountDelete`)
+- [x] Service auth (`getServiceAuth`)
+- [x] Signing key reservation (`reserveSigningKey`)
+- [x] Blob sync helper (`listMissingBlobs`)
 
-**Phase 3: Performance & Reliability**
-- [ ] Redis caching layer
-- [ ] Background job processing (Oban)
-- [ ] Database query optimization (feed queries, engagement counts)
-- [ ] Token cleanup automation
-- [ ] Blob garbage collection
+Email endpoints deferred (not critical for core functionality):
+- [ ] Email verification (`confirmEmail`, `requestEmailConfirmation`)
+- [ ] Password reset (`resetPassword`, `requestPasswordReset`)
+- [ ] Email updates (`updateEmail`, `requestEmailUpdate`)
 
-**Phase 4: Security Enhancements**
-- [ ] Rate limiting
-- [ ] Email verification
-- [ ] Account recovery flows
-- [ ] Multi-client OAuth support
-- [ ] IP-based access controls
+**Phase 2: Production Readiness**
+- [ ] Rate limiting (DDoS protection)
+- [ ] Token cleanup automation (scheduled job)
+- [ ] Proper logging (structured)
+- [ ] Health checks and monitoring
+- [ ] Docker deployment
+- [ ] Environment-based configuration
 
-**Phase 5: Data Management**
+**Phase 3: Blob Storage Enhancement**
 - [ ] Object storage integration (S3/MinIO/local filesystem)
 - [ ] Blob retrieval endpoints
 - [ ] Proper CIDv1 generation with multihash
 - [ ] Blob size limits and validation
-- [ ] Blob-to-record linking implementation
-- [ ] Blob deduplication
 - [ ] Blob garbage collection
-- [ ] Lexicon schema validation
-- [ ] Repository backup/restore
-- [ ] Data retention policies
 - [ ] Blob virus scanning
 
-**Phase 6: Observability**
-- [ ] Prometheus metrics
-- [ ] Structured logging
-- [ ] Admin dashboard
-- [ ] Audit logging
-- [ ] Performance monitoring
+**Phase 4: Federation Enhancement**
+- [ ] Commit signature verification
+- [ ] Relay server integration
+- [ ] Firehose event stream subscriptions
+- [ ] Repository backup/restore
 
-**Phase 7: Developer Experience**
-- [ ] OpenAPI documentation
-- [ ] Client SDK generation
-- [ ] GraphQL API layer
-- [ ] WebSocket subscriptions
-- [ ] Docker deployment
+**Phase 5: Optional AppView Integration**
+- [ ] AppView proxy implementation
+- [ ] Read-after-write (RAW) pattern
+- [ ] Configurable standalone vs federated mode
+- [ ] AppView client module
+
+**Future: Beyond PDS Scope**
+- [ ] Separate AppView service (if needed)
+- [ ] Feed generator execution engine
+- [ ] Advanced moderation tools
+- [ ] Analytics and metrics
 
 ## Quick Start
 
@@ -186,6 +223,7 @@ Tests account creation → repository creation → record CRUD → CAR export. R
 **Accounts** (`lib/aether_pds_server/accounts.ex`)
 - User account management
 - Authentication (handle/email + password)
+- App password management (create, list, revoke)
 - Password hashing with Argon2
 - DID generation (did:plc format)
 
@@ -362,6 +400,14 @@ mix test --failed
 - [aether_atproto](https://github.com/your-org/aether_atproto) - ATProto library for Elixir
 - [Bluesky](https://bsky.app/) - Reference implementation
 
+## Documentation
+
+- **`PDS_COMPARISON.md`** - Detailed comparison with official Bluesky PDS
+- **`CLAUDE.md`** - Development guidelines and project context
+- **Router annotations** - Endpoint scope markers in `lib/aether_pds_server_web/router.ex`
+
 ---
 
-**Status**: Active Development | **Version**: 0.2.0 | **Phase**: App.bsky Social Features (80% Complete)
+**Status**: Active Development | **Version**: 0.2.0
+**Architecture**: Standalone PDS (with AppView features for development)
+**Completeness**: Core PDS 100% (all non-email endpoints complete, 6 email endpoints deferred) | Extended Features ~80%

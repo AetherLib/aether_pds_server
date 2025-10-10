@@ -7,7 +7,7 @@ defmodule AetherPDSServer.Repositories.Blob do
     field :cid, :string
     field :mime_type, :string
     field :size, :integer
-    field :data, :binary
+    field :storage_key, :string
 
     belongs_to :repository, AetherPDSServer.Repositories.Repository,
       foreign_key: :repository_did,
@@ -20,8 +20,8 @@ defmodule AetherPDSServer.Repositories.Blob do
   @doc false
   def changeset(blob, attrs) do
     blob
-    |> cast(attrs, [:repository_did, :cid, :mime_type, :size, :data])
-    |> validate_required([:repository_did, :cid, :mime_type, :size])
+    |> cast(attrs, [:repository_did, :cid, :mime_type, :size, :storage_key])
+    |> validate_required([:repository_did, :cid, :mime_type, :size, :storage_key])
     |> unique_constraint([:repository_did, :cid])
   end
 end
