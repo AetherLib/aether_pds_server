@@ -11,12 +11,17 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
   Serve the DID for handle-based resolution. This is called when someone
   visits https://[handle]/.well-known/atproto-did to verify handle ownership.
   The response should be plain text containing just the DID.
+
+  Supports both:
+  - Direct domain: somehandle.com -> looks up "somehandle.com"
+  - Subdomain: somehandle.aetherlib.org -> looks up "somehandle.aetherlib.org"
   """
   def well_known_did(conn, _params) do
-    # Get the host from the request
+    # Get the host from the request (e.g., "somehandle.aetherlib.org")
     host = conn.host
 
-    # Look up the account by handle (the host is the handle)
+    # The full host IS the handle in ATProto (handles are full domain names)
+    # For example: "alice.bsky.social" or "alice.aetherlib.org"
     case Accounts.get_account_by_handle(host) do
       %{did: did} ->
         conn
