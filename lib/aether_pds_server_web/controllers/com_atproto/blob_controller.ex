@@ -47,8 +47,15 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
             }
 
             Logger.info("Blob upload success - sending response with original conn")
-            # Use original conn, not updated_conn, to avoid HTTP/2 response issues
-            json(conn, response)
+
+            # Encode JSON and send with explicit content-length
+            # Bluesky client requires content-length header
+            json_body = Jason.encode!(response)
+
+            conn
+            |> put_resp_content_type("application/json; charset=utf-8")
+            |> put_resp_header("content-length", Integer.to_string(byte_size(json_body)))
+            |> send_resp(200, json_body)
 
           {:error, changeset} ->
             Logger.error("Failed to save blob metadata: #{inspect(changeset)}")
