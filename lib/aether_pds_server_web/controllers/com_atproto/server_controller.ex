@@ -91,7 +91,7 @@ defmodule AetherPDSServerWeb.ComATProto.ServerController do
 
   Create a new session (login)
   """
-  def create_session(conn, %{"identifier" => identifier, "password" => password} = params) do
+  def create_session(conn, %{"identifier" => identifier, "password" => password}) do
     case Accounts.authenticate(identifier, password) do
       {:ok, account} ->
         {:ok, access_token} = Accounts.create_access_token(account.did)
@@ -403,7 +403,10 @@ defmodule AetherPDSServerWeb.ComATProto.ServerController do
   def delete_account(conn, _params) do
     conn
     |> put_status(:bad_request)
-    |> json(%{error: "InvalidRequest", message: "Missing required parameters: did, password, token"})
+    |> json(%{
+      error: "InvalidRequest",
+      message: "Missing required parameters: did, password, token"
+    })
   end
 
   @doc """
@@ -423,7 +426,8 @@ defmodule AetherPDSServerWeb.ComATProto.ServerController do
     |> put_status(:not_implemented)
     |> json(%{
       error: "NotImplemented",
-      message: "Account deletion requires email verification which is not yet implemented. Please contact an administrator."
+      message:
+        "Account deletion requires email verification which is not yet implemented. Please contact an administrator."
     })
   end
 
@@ -520,26 +524,8 @@ defmodule AetherPDSServerWeb.ComATProto.ServerController do
         |> json(%{error: "AccountNotFound", message: "Account not found"})
 
       _account ->
-        # Generate a new signing keypair
-        case generate_signing_keypair() do
-          {:ok, signing_key} ->
-            # In a production system, this would:
-            # 1. Store the keypair in the database
-            # 2. Associate it with the user's DID
-            # 3. Return the public key
-            #
-            # For now, we'll return a generated key
-
-            json(conn, %{signingKey: signing_key})
-
-          {:error, reason} ->
-            conn
-            |> put_status(:internal_server_error)
-            |> json(%{
-              error: "InternalServerError",
-              message: "Failed to generate signing key: #{inspect(reason)}"
-            })
-        end
+        {:ok, signing_key} = generate_signing_keypair()
+        json(conn, %{signingKey: signing_key})
     end
   end
 

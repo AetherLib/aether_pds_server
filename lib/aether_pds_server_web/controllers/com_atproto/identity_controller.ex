@@ -4,7 +4,6 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
 
   alias AetherPDSServer.Accounts
   alias AetherPDSServer.DIDResolver
-  alias AetherPDSServer.DIDDocument
 
   @doc """
   GET /.well-known/atproto-did

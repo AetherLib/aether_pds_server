@@ -20,6 +20,7 @@ defmodule AetherPDSServer.DIDResolver do
   """
 
   require Logger
+  alias AetherPDSServer.Accounts
 
   @doc """
   Resolves a handle to a DID.
@@ -150,13 +151,8 @@ defmodule AetherPDSServer.DIDResolver do
     end
   end
 
-  # Private functions
-
   defp resolve_local_did_web(domain) do
     # Check if this is one of our local accounts
-    alias AetherPDSServer.Accounts
-    alias AetherPDSServer.DIDDocument
-
     case Accounts.get_account_by_handle(domain) do
       nil ->
         {:error, :not_local}

@@ -8,7 +8,6 @@ defmodule AetherPDSServer.Accounts do
   alias AetherPDSServer.Repositories
   alias AetherPDSServer.Accounts.Account
   alias AetherPDSServer.Accounts.AppPassword
-  alias AetherPDSServer.OAuth
 
   # ============================================================================
   # Account Management
@@ -118,10 +117,11 @@ defmodule AetherPDSServer.Accounts do
 
     # Generate CID for empty MST using proper CID generation
     # MST blocks use dag-cbor codec
-    empty_mst_data = CBOR.encode(%{
-      layer: 0,
-      entries: []
-    })
+    empty_mst_data =
+      CBOR.encode(%{
+        layer: 0,
+        entries: []
+      })
 
     cid_string = CID.from_data(empty_mst_data, "dag-cbor")
 
@@ -433,11 +433,8 @@ defmodule AetherPDSServer.Accounts do
     end
   end
 
-  @doc """
-  Generate a random app password.
-
-  Format: xxxx-xxxx-xxxx-xxxx (4 groups of 4 alphanumeric characters)
-  """
+  # Generate a random app password.
+  # Format: xxxx-xxxx-xxxx-xxxx (4 groups of 4 alphanumeric characters)
   defp generate_app_password do
     chars = "abcdefghijklmnopqrstuvwxyz0123456789"
 

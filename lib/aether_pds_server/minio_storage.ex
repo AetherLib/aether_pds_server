@@ -3,10 +3,9 @@ defmodule AetherPDSServer.MinioStorage do
   Handles streaming uploads to MinIO object storage.
 
   This module provides a thin streaming proxy that:
-  1. Receives blob data from Phoenix
-  2. Streams it directly to MinIO via HTTP PUT
-  3. Calculates CID hash during streaming (minimal memory usage)
-  4. Never stores full blob in RAM
+  * Receives blob data from Phoenix
+  * Streams it directly to MinIO via HTTP PUT
+  * Calculates CID hash during streaming (minimal memory usage)
   """
 
   require Logger
@@ -93,18 +92,14 @@ defmodule AetherPDSServer.MinioStorage do
     end
   end
 
-  @doc """
-  Generate a unique storage key for a blob.
-  Format: {did}/{uuid}
-  """
+  # Generate a unique storage key for a blob.
+  # Format: {did}/{uuid}
   defp generate_storage_key(repository_did) do
     uuid = Ecto.UUID.generate()
     "#{repository_did}/#{uuid}"
   end
 
-  @doc """
-  Stream request body to MinIO while calculating CID.
-  """
+  # Stream request body to MinIO while calculating CID.
   defp stream_to_minio(conn, storage_key, mime_type) do
     config = get_config()
 
@@ -121,9 +116,7 @@ defmodule AetherPDSServer.MinioStorage do
     end
   end
 
-  @doc """
-  Stream body chunks to MinIO via HTTP PUT with AWS Signature V4.
-  """
+  # Stream body chunks to MinIO via HTTP PUT with AWS Signature V4.
   defp stream_body_to_minio(conn, storage_key, mime_type, config) do
     # Collect all chunks first to calculate content-length
     case collect_body_chunks(conn, 0, []) do
@@ -142,10 +135,8 @@ defmodule AetherPDSServer.MinioStorage do
     end
   end
 
-  @doc """
-  Collect body chunks from the request.
-  Returns the complete body data for CID calculation.
-  """
+  # Collect body chunks from the request.
+  # Returns the complete body data for CID calculation.
   defp collect_body_chunks(conn, total_size, chunks) do
     case Plug.Conn.read_body(conn, length: 1_000_000) do
       {:ok, data, updated_conn} ->
@@ -163,16 +154,12 @@ defmodule AetherPDSServer.MinioStorage do
     end
   end
 
-  @doc """
-  Upload data to MinIO using ExAws (which handles AWS Signature V4 authentication).
-  """
+  # Upload data to MinIO using ExAws (which handles AWS Signature V4 authentication).
   defp upload_to_minio(storage_key, body_data, mime_type, _content_length, config) do
     # Use ExAws.S3 to upload with proper AWS Signature V4 signing
     bucket = config.bucket
 
-    operation = ExAws.S3.put_object(bucket, storage_key, body_data, [
-      content_type: mime_type
-    ])
+    operation = ExAws.S3.put_object(bucket, storage_key, body_data, content_type: mime_type)
 
     # Configure ExAws with MinIO endpoint
     uri = URI.parse(config.endpoint)
@@ -196,9 +183,7 @@ defmodule AetherPDSServer.MinioStorage do
     end
   end
 
-  @doc """
-  Get MinIO configuration from application config.
-  """
+  # Get MinIO configuration from application config.
   defp get_config do
     config = Application.get_env(:aether_pds_server, :minio)
 

@@ -270,7 +270,7 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
     # 2. Check if each referenced blob exists in storage
     # 3. Return CIDs of missing blobs
 
-    limit = params |> Map.get("limit", "500") |> String.to_integer() |> min(1000)
+    _limit = params |> Map.get("limit", "500") |> String.to_integer() |> min(1000)
     _cursor = Map.get(params, "cursor")
 
     # Verify repository exists
@@ -319,7 +319,10 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
       {:error, reason} ->
         conn
         |> put_status(:bad_request)
-        |> json(%{error: "ImportFailed", message: "Failed to import repository: #{inspect(reason)}"})
+        |> json(%{
+          error: "ImportFailed",
+          message: "Failed to import repository: #{inspect(reason)}"
+        })
     end
   end
 
@@ -1062,8 +1065,11 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
 
     {:ok, _commit} = Repositories.create_commit(commit_attrs)
 
+    # TODO: We are not doing anything yet with the repo
     # 7. Update repository head
-    {:ok, repo} = Repositories.get_repository(did) |> Repositories.update_repository(%{head_cid: root_cid_string})
+    {:ok, _repo} =
+      Repositories.get_repository(did)
+      |> Repositories.update_repository(%{head_cid: root_cid_string})
 
     # 8. Create import event
     event_attrs = %{
