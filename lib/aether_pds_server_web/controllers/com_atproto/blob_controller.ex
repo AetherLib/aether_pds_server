@@ -45,12 +45,17 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
             # Log the exact response being sent
             response_json = Jason.encode!(response)
             content_length = byte_size(response_json)
-            Logger.info("Sending blob upload response: #{response_json} (#{content_length} bytes)")
+            Logger.info("Blob upload success - DID: #{did}, CID: #{cid}, Size: #{size}")
+            Logger.info("Response JSON: #{response_json} (#{content_length} bytes)")
+            Logger.info("Connection state before response - adapter: #{inspect(updated_conn.adapter)}, state: #{inspect(updated_conn.state)}")
 
-            updated_conn
-            |> put_resp_content_type("application/json")
-            |> put_resp_header("content-length", Integer.to_string(content_length))
-            |> send_resp(200, response_json)
+            result =
+              updated_conn
+              |> put_resp_content_type("application/json; charset=utf-8")
+              |> send_resp(200, response_json)
+
+            Logger.info("Response sent - state: #{inspect(result.state)}, resp_body: #{inspect(result.resp_body)}")
+            result
 
           {:error, changeset} ->
             Logger.error("Failed to save blob metadata: #{inspect(changeset)}")
