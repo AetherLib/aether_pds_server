@@ -85,6 +85,11 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
+  # PDS endpoint URL for DID documents (defaults to constructed URL if not set)
+  if pds_endpoint = System.get_env("PDS_ENDPOINT") do
+    config :aether_pds_server, :pds_endpoint, pds_endpoint
+  end
+
   # ## SSL Support
   #
   # To get SSL working, you will need to add the `https` key

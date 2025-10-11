@@ -309,14 +309,10 @@ defmodule AetherPDSServer.Accounts do
   # ============================================================================
 
   defp generate_did(handle) do
-    # For now, use a simple did:plc format
-    # In production, you'd generate a proper PLC DID
-    identifier =
-      :crypto.hash(:sha256, handle)
-      |> Base.encode32(case: :lower, padding: false)
-      |> String.slice(0..23)
-
-    "did:plc:#{identifier}"
+    # Use did:web method which resolves via HTTPS at the handle's domain
+    # This avoids needing to register with the PLC directory
+    # Format: did:web:handle (e.g., did:web:alice.aetherlib.org)
+    "did:web:#{handle}"
   end
 
   # ============================================================================

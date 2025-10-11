@@ -4,6 +4,7 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
 
   alias AetherPDSServer.Accounts
   alias AetherPDSServer.DIDResolver
+  alias AetherPDSServer.DIDDocument
 
   @doc """
   GET /.well-known/atproto-did
@@ -32,6 +33,51 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
         conn
         |> put_resp_content_type("text/plain")
         |> send_resp(404, "Handle not found")
+    end
+  end
+
+  @doc """
+  GET /.well-known/did.json
+
+  Serve the DID document for did:web resolution. This endpoint is called
+  when resolving a did:web DID like did:web:alice.aetherlib.org
+
+  The OAuth client will fetch https://alice.aetherlib.org/.well-known/did.json
+  to resolve the DID document.
+  """
+  def well_known_did_json(conn, _params) do
+    # Get the host from the request (e.g., "alice.aetherlib.org")
+    host = conn.host
+
+    # Look up the account by handle
+    case Accounts.get_account_by_handle(host) do
+      %{did: did, handle: handle} = _account ->
+        # Get the PDS endpoint from the application config
+        pds_endpoint = get_pds_endpoint()
+
+        # Generate the DID document
+        did_doc = %{
+          "@context" => [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/secp256k1-2019/v1"
+          ],
+          "id" => did,
+          "alsoKnownAs" => ["at://#{handle}"],
+          "service" => [
+            %{
+              "id" => "#atproto_pds",
+              "type" => "AtprotoPersonalDataServer",
+              "serviceEndpoint" => pds_endpoint
+            }
+          ]
+        }
+
+        json(conn, did_doc)
+
+      nil ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "NotFound", message: "Handle not found"})
     end
   end
 
@@ -89,6 +135,34 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
         conn
         |> put_status(:bad_request)
         |> json(%{error: "InvalidRequest", message: "Failed to resolve DID"})
+    end
+  end
+
+  # Private helper to get PDS endpoint
+  defp get_pds_endpoint do
+    # Get the configured PDS endpoint from the application environment
+    # Falls back to constructing from endpoint config
+    case Application.get_env(:aether_pds_server, :pds_endpoint) do
+      nil ->
+        # Construct from endpoint config
+        endpoint_config = Application.get_env(:aether_pds_server, AetherPDSServerWeb.Endpoint)
+        url_config = Keyword.get(endpoint_config, :url, [])
+        host = Keyword.get(url_config, :host, "localhost")
+        port = Keyword.get(url_config, :port, 4000)
+        scheme = if Keyword.get(url_config, :scheme) == "https", do: "https", else: "http"
+
+        # Only include port if it's not the default for the scheme
+        port_suffix =
+          cond do
+            scheme == "https" and port == 443 -> ""
+            scheme == "http" and port == 80 -> ""
+            true -> ":#{port}"
+          end
+
+        "#{scheme}://#{host}#{port_suffix}"
+
+      endpoint ->
+        endpoint
     end
   end
 end

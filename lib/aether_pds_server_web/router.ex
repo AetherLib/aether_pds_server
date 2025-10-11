@@ -39,6 +39,9 @@ defmodule AetherPDSServerWeb.Router do
     # ATProto DID resolution for handle verification
     get "/.well-known/atproto-did", ComATProto.IdentityController, :well_known_did
 
+    # did:web resolution endpoint
+    get "/.well-known/did.json", ComATProto.IdentityController, :well_known_did_json
+
     # Token endpoints
     post "/oauth/token", OAuthController, :token
     post "/oauth/revoke", OAuthController, :revoke
