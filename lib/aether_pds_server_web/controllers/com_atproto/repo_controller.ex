@@ -613,6 +613,9 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
       # 1. Create the record
       {:ok, record} = Repositories.create_record(record_attrs)
 
+      # 1b. Create blob references for any blobs in the record
+      create_blob_refs_for_record(did, record)
+
       # 2. Load current MST and add the new record
       repo = Repositories.get_repository!(did)
       {:ok, mst} = load_mst(did)
@@ -689,6 +692,9 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
   defp update_record_with_commit(did, record, update_attrs) do
     AetherPDSServer.Repo.transaction(fn ->
       {:ok, updated_record} = Repositories.update_record(record, update_attrs)
+
+      # Update blob references for any blobs in the updated record
+      create_blob_refs_for_record(did, updated_record)
 
       # Load current MST and update the record
       repo = Repositories.get_repository!(did)
@@ -845,6 +851,77 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
   defp generate_tid do
     TID.new()
   end
+
+  # Extract blob CIDs from record value and create blob references
+  defp create_blob_refs_for_record(did, record) do
+    record_uri = "at://#{did}/#{record.collection}/#{record.rkey}"
+    blob_cids = extract_blob_cids(record.value)
+
+    Enum.each(blob_cids, fn blob_cid ->
+      Repositories.create_blob_ref(%{
+        blob_cid: blob_cid,
+        repository_did: did,
+        record_uri: record_uri
+      })
+    end)
+  end
+
+  # Recursively extract blob CIDs from a record value
+  defp extract_blob_cids(value) when is_map(value) do
+    cond do
+      # Check if this is a blob reference
+      value["$type"] == "blob" && value["ref"] && value["ref"]["$link"] ->
+        [value["ref"]["$link"]]
+
+      # Check if this has an embed with images
+      value["embed"] && value["embed"]["$type"] == "app.bsky.embed.images" ->
+        images = value["embed"]["images"] || []
+
+        Enum.flat_map(images, fn image ->
+          if image["image"] && image["image"]["$type"] == "blob" && image["image"]["ref"] do
+            [image["image"]["ref"]["$link"]]
+          else
+            []
+          end
+        end)
+
+      # Check if this has an embed with external link and thumb
+      value["embed"] && value["embed"]["$type"] == "app.bsky.embed.external" ->
+        external = value["embed"]["external"]
+
+        if external && external["thumb"] && external["thumb"]["$type"] == "blob" &&
+             external["thumb"]["ref"] do
+          [external["thumb"]["ref"]["$link"]]
+        else
+          []
+        end
+
+      # Check if this is a profile with avatar/banner
+      value["avatar"] && value["avatar"]["$type"] == "blob" && value["avatar"]["ref"] ->
+        avatar_cid = [value["avatar"]["ref"]["$link"]]
+
+        banner_cid =
+          if value["banner"] && value["banner"]["$type"] == "blob" && value["banner"]["ref"] do
+            [value["banner"]["ref"]["$link"]]
+          else
+            []
+          end
+
+        avatar_cid ++ banner_cid
+
+      # Recursively check nested maps
+      true ->
+        value
+        |> Map.values()
+        |> Enum.flat_map(&extract_blob_cids/1)
+    end
+  end
+
+  defp extract_blob_cids(value) when is_list(value) do
+    Enum.flat_map(value, &extract_blob_cids/1)
+  end
+
+  defp extract_blob_cids(_value), do: []
 
   # ============================================================================
   # MST Helper Functions
