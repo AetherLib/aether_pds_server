@@ -46,21 +46,26 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
 
             Logger.info("Blob upload success - DID: #{did}, CID: #{cid}, Size: #{size}")
 
-            # Manually encode and send response with explicit headers
-            # This ensures proper handling through HTTP/2 proxies like Cloudflare
+            # Encode response
             json_body = Jason.encode!(response)
             Logger.info("Encoded JSON body: #{json_body} (#{byte_size(json_body)} bytes)")
 
-            result =
+            # Use chunked response to work around Bandit HTTP/2 body consumption issue
+            conn =
               conn
-              |> put_resp_header("content-type", "application/json; charset=utf-8")
-              |> put_resp_header("content-length", Integer.to_string(byte_size(json_body)))
-              |> put_resp_header("cache-control", "no-cache, no-store, must-revalidate")
-              |> resp(200, json_body)
-              |> send_resp()
+              |> put_resp_content_type("application/json; charset=utf-8")
+              |> send_chunked(200)
 
-            Logger.info("Response sent - state: #{inspect(result.state)}, resp_body present: #{inspect(result.resp_body != nil && result.resp_body != "")}, resp_body size: #{inspect(byte_size(result.resp_body || ""))}")
-            result
+            # Send the JSON body as a single chunk
+            case Plug.Conn.chunk(conn, json_body) do
+              {:ok, conn} ->
+                Logger.info("Successfully sent response chunk")
+                conn
+
+              {:error, reason} ->
+                Logger.error("Failed to send chunk: #{inspect(reason)}")
+                conn
+            end
 
           {:error, changeset} ->
             Logger.error("Failed to save blob metadata: #{inspect(changeset)}")
