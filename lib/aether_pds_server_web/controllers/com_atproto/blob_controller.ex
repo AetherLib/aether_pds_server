@@ -51,10 +51,15 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
             # Encode JSON and send with explicit content-length
             # Bluesky client requires content-length header
             json_body = Jason.encode!(response)
+            content_length = byte_size(json_body)
+
+            Logger.info("Sending response - body size: #{content_length} bytes")
+            Logger.info("Response JSON: #{json_body}")
 
             conn
-            |> put_resp_content_type("application/json; charset=utf-8")
-            |> put_resp_header("content-length", Integer.to_string(byte_size(json_body)))
+            |> delete_resp_header("content-type")
+            |> put_resp_header("content-type", "application/json; charset=utf-8")
+            |> put_resp_header("content-length", Integer.to_string(content_length))
             |> send_resp(200, json_body)
 
           {:error, changeset} ->
