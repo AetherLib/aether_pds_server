@@ -16,7 +16,7 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
       # DPoP-bound token (OAuth flow)
       "DPoP " <> token when not is_nil(dpop_header) ->
         method = conn.method
-        url = request_url(conn)
+        url = build_request_url(conn)
 
         case OAuth.validate_access_token(token, dpop_header, method, url) do
           {:ok, token_data} ->
@@ -49,7 +49,7 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
     end
   end
 
-  defp request_url(conn) do
+  defp build_request_url(conn) do
     scheme = if conn.scheme == :https, do: "https", else: "http"
     host = conn.host
     port = conn.port
