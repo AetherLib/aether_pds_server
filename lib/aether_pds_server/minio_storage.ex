@@ -114,7 +114,7 @@ defmodule AetherPDSServer.MinioStorage do
     # Read body in chunks and stream to MinIO
     case stream_body_to_minio(conn, storage_key, mime_type, hash_state, 0, config) do
       {:ok, final_hash, total_size} ->
-        cid = finalize_cid(final_hash)
+        cid = finalize_cid(final_hash, storage_key)
         {:ok, cid, total_size}
 
       {:error, _reason} = error ->
@@ -201,12 +201,17 @@ defmodule AetherPDSServer.MinioStorage do
   @doc """
   Finalize CID from hash state.
   Uses ATProto CID format (CIDv1 with sha256).
+  Incorporates storage_key to ensure each upload gets a unique CID.
   """
-  defp finalize_cid(hash_state) do
-    hash = :crypto.hash_final(hash_state)
+  defp finalize_cid(hash_state, storage_key) do
+    content_hash = :crypto.hash_final(hash_state)
+
+    # Combine content hash with storage key to ensure uniqueness
+    combined = content_hash <> storage_key
+    final_hash = :crypto.hash(:sha256, combined)
+
     # CIDv1 format: base32-encoded multihash
-    # For now, use simple format matching existing implementation
-    encoded = Base.encode32(hash, case: :lower, padding: false)
+    encoded = Base.encode32(final_hash, case: :lower, padding: false)
     "bafkrei" <> String.slice(encoded, 0..50)
   end
 
