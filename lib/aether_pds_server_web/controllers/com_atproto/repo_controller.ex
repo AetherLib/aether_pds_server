@@ -486,6 +486,9 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
 
       case Repositories.create_record(record_attrs) do
         {:ok, record} ->
+          # Create blob references for any blobs in the record
+          create_blob_refs_for_record(repo_did, record)
+
           # Update MST
           {:ok, record_cid_parsed} = CID.parse_cid(record.cid)
           mst_key = "#{collection}/#{rkey}"
@@ -534,6 +537,9 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
 
         case Repositories.update_record(existing_record, %{cid: new_cid, value: value}) do
           {:ok, updated_record} ->
+            # Create blob references for any blobs in the updated record
+            create_blob_refs_for_record(repo_did, updated_record)
+
             # Update MST
             {:ok, record_cid_parsed} = CID.parse_cid(updated_record.cid)
             mst_key = "#{collection}/#{rkey}"
