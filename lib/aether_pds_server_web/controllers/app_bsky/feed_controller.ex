@@ -1129,14 +1129,15 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     post_view =
       case Map.get(record.value, "embed") do
         nil -> post_view
-        embed -> Map.put(post_view, :embed, hydrate_embed(embed))
+        embed -> Map.put(post_view, :embed, hydrate_embed(embed, record.repository_did))
       end
 
     post_view
   end
 
   # Hydrate embed from record format to view format
-  defp hydrate_embed(embed) when is_map(embed) do
+  # Takes the embed and repository DID to construct full blob URLs
+  defp hydrate_embed(embed, repository_did) when is_map(embed) do
     case Map.get(embed, "$type") do
       "app.bsky.embed.images" ->
         %{
@@ -1144,8 +1145,8 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
           "images" =>
             Enum.map(Map.get(embed, "images", []), fn image ->
               %{
-                "thumb" => build_blob_url(image["image"]),
-                "fullsize" => build_blob_url(image["image"]),
+                "thumb" => build_blob_url(image["image"], repository_did),
+                "fullsize" => build_blob_url(image["image"], repository_did),
                 "alt" => Map.get(image, "alt", ""),
                 "aspectRatio" => Map.get(image, "aspectRatio")
               }
@@ -1163,7 +1164,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
             "uri" => external["uri"],
             "title" => external["title"],
             "description" => external["description"],
-            "thumb" => if(external["thumb"], do: build_blob_url(external["thumb"]))
+            "thumb" => if(external["thumb"], do: build_blob_url(external["thumb"], repository_did))
           }
           |> Enum.reject(fn {_k, v} -> is_nil(v) end)
           |> Map.new()
@@ -1185,25 +1186,24 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     end
   end
 
-  defp hydrate_embed(embed), do: embed
+  defp hydrate_embed(embed, _repository_did), do: embed
 
   # Build blob URL from blob reference
   # Returns the full URL to the getBlob endpoint that the Bluesky app will use to fetch the image
-  defp build_blob_url(blob) when is_map(blob) do
+  defp build_blob_url(blob, repository_did) when is_map(blob) and is_binary(repository_did) do
     cid = get_in(blob, ["ref", "$link"])
 
     if cid do
-      # The Bluesky app expects the full URL to the getBlob endpoint
-      # Format: https://your-pds.com/xrpc/com.atproto.sync.getBlob?did=did:web:user&cid=bafkrei...
-      # However, the official implementation returns just the CID and the client constructs the URL
-      # So we return just the CID for now
-      cid
+      # Construct the full URL to the getBlob endpoint
+      # Format: https://your-pds.com/xrpc/com.atproto.sync.getBlob?did=X&cid=Y
+      # For now, we hardcode aetherlib.org, but in production this should use the actual service URL
+      "https://aetherlib.org/xrpc/com.atproto.sync.getBlob?did=#{URI.encode_www_form(repository_did)}&cid=#{URI.encode_www_form(cid)}"
     else
       nil
     end
   end
 
-  defp build_blob_url(_), do: nil
+  defp build_blob_url(_, _), do: nil
 
   # Build viewer state for a post
   defp build_post_viewer_state(nil, _post_uri) do
