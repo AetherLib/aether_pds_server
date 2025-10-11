@@ -137,15 +137,24 @@ defmodule AetherPDSServerWeb.OAuthController do
     actual_params =
       case Map.get(params, "request_uri") do
         nil ->
+          Logger.debug("Direct authorization request (no PAR)")
           params
 
         request_uri ->
+          Logger.debug("PAR-based authorization request: #{request_uri}")
           # Fetch parameters from database
           case OAuth.get_par(request_uri) do
-            {:ok, stored_params} -> stored_params
-            {:error, _} -> params
+            {:ok, stored_params} ->
+              Logger.debug("Retrieved PAR params: #{inspect(stored_params)}")
+              stored_params
+
+            {:error, reason} ->
+              Logger.error("Failed to retrieve PAR: #{inspect(reason)}")
+              params
           end
       end
+
+    Logger.debug("Validating params: #{inspect(actual_params)}")
 
     with {:ok, validated_params} <- validate_authorization_params(actual_params),
          {:ok, client} <-

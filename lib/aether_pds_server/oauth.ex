@@ -109,15 +109,16 @@ defmodule AetherPDSServer.OAuth do
         # Mark as used (single-use)
         Repo.update!(PushedAuthorizationRequest.changeset(par, %{used: true}))
 
+        # Return with string keys to match controller expectations
         {:ok,
          %{
-           response_type: par.response_type,
-           client_id: par.client_id,
-           redirect_uri: par.redirect_uri,
-           state: par.state,
-           code_challenge: par.code_challenge,
-           code_challenge_method: par.code_challenge_method,
-           scope: par.scope
+           "response_type" => par.response_type,
+           "client_id" => par.client_id,
+           "redirect_uri" => par.redirect_uri,
+           "state" => par.state,
+           "code_challenge" => par.code_challenge,
+           "code_challenge_method" => par.code_challenge_method,
+           "scope" => par.scope
          }}
     end
   end
