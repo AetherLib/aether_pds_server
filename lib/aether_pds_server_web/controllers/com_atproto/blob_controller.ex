@@ -18,9 +18,8 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
     mime_type = get_content_type(conn)
 
     # Stream upload to MinIO while calculating CID
-    # NOTE: We need updated_conn for proper connection state
     case MinioStorage.upload_blob(conn, did, mime_type) do
-      {:ok, updated_conn, cid, size, storage_key} ->
+      {:ok, _updated_conn, cid, size, storage_key} ->
         Logger.info("MinIO upload successful - CID: #{cid}, Size: #{size}, Storage: #{storage_key}")
 
         # Store metadata in database
@@ -34,8 +33,7 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
 
         case Repositories.create_blob(blob_attrs) do
           {:ok, _blob} ->
-            # IMPORTANT: Key order matters for Bluesky's parser
-            # Must match official PDS response format exactly
+            # IMPORTANT: Response format must match official ATProto spec
             response = %{
               blob: %{
                 "$type" => "blob",
@@ -47,18 +45,16 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
               }
             }
 
-            Logger.info("Blob upload success - sending response with original conn")
+            Logger.info("Blob upload success - CID: #{cid}")
 
             # Encode JSON and send with explicit content-length
-            # Bluesky client requires exact byte-perfect response
             json_body = Jason.encode!(response)
             content_length = byte_size(json_body)
 
             Logger.info("Sending response - body size: #{content_length} bytes")
             Logger.info("Response JSON: #{json_body}")
-            Logger.info("Response bytes (hex): #{Base.encode16(json_body)}")
 
-            # Use original conn and register a callback to ensure response is sent
+            # Send response with proper headers
             conn
             |> register_before_send(fn conn ->
               Logger.info("Before send callback - ensuring response is flushed")

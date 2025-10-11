@@ -108,13 +108,12 @@ defmodule AetherPDSServer.MinioStorage do
   defp stream_to_minio(conn, storage_key, mime_type) do
     config = get_config()
 
-    # Initialize hash state for CID calculation
-    hash_state = :crypto.hash_init(:sha256)
-
     # Read body in chunks and stream to MinIO
-    case stream_body_to_minio(conn, storage_key, mime_type, hash_state, 0, config) do
-      {:ok, updated_conn, final_hash, total_size} ->
-        cid = finalize_cid(final_hash, storage_key)
+    # We need to collect the full data to generate proper CID
+    case stream_body_to_minio(conn, storage_key, mime_type, config) do
+      {:ok, updated_conn, body_data, total_size} ->
+        # Generate proper ATProto CID using raw codec for blobs
+        cid = Aether.ATProto.CID.from_data(body_data, "raw")
         {:ok, updated_conn, cid, total_size}
 
       {:error, _reason} = error ->
@@ -125,14 +124,14 @@ defmodule AetherPDSServer.MinioStorage do
   @doc """
   Stream body chunks to MinIO via HTTP PUT with AWS Signature V4.
   """
-  defp stream_body_to_minio(conn, storage_key, mime_type, hash_state, total_size, config) do
+  defp stream_body_to_minio(conn, storage_key, mime_type, config) do
     # Collect all chunks first to calculate content-length
-    case collect_body_chunks(conn, hash_state, total_size, []) do
-      {:ok, updated_conn, body_data, final_hash, final_size} ->
+    case collect_body_chunks(conn, 0, []) do
+      {:ok, updated_conn, body_data, final_size} ->
         # Now upload to MinIO with proper content-length
         case upload_to_minio(storage_key, body_data, mime_type, final_size, config) do
           :ok ->
-            {:ok, updated_conn, final_hash, final_size}
+            {:ok, updated_conn, body_data, final_size}
 
           {:error, reason} ->
             {:error, reason}
@@ -144,21 +143,20 @@ defmodule AetherPDSServer.MinioStorage do
   end
 
   @doc """
-  Collect body chunks while calculating hash.
+  Collect body chunks from the request.
+  Returns the complete body data for CID calculation.
   """
-  defp collect_body_chunks(conn, hash_state, total_size, chunks) do
+  defp collect_body_chunks(conn, total_size, chunks) do
     case Plug.Conn.read_body(conn, length: 1_000_000) do
       {:ok, data, updated_conn} ->
         # Last chunk
-        new_hash = :crypto.hash_update(hash_state, data)
         all_chunks = [data | chunks] |> Enum.reverse()
         body_data = IO.iodata_to_binary(all_chunks)
-        {:ok, updated_conn, body_data, new_hash, total_size + byte_size(data)}
+        {:ok, updated_conn, body_data, total_size + byte_size(data)}
 
       {:more, data, conn} ->
         # More chunks coming
-        new_hash = :crypto.hash_update(hash_state, data)
-        collect_body_chunks(conn, new_hash, total_size + byte_size(data), [data | chunks])
+        collect_body_chunks(conn, total_size + byte_size(data), [data | chunks])
 
       {:error, reason} ->
         {:error, reason}
@@ -196,23 +194,6 @@ defmodule AetherPDSServer.MinioStorage do
         Logger.error("MinIO upload request failed: #{inspect(reason)}")
         {:error, reason}
     end
-  end
-
-  @doc """
-  Finalize CID from hash state.
-  Uses ATProto CID format (CIDv1 with sha256).
-  Incorporates storage_key to ensure each upload gets a unique CID.
-  """
-  defp finalize_cid(hash_state, storage_key) do
-    content_hash = :crypto.hash_final(hash_state)
-
-    # Combine content hash with storage key to ensure uniqueness
-    combined = content_hash <> storage_key
-    final_hash = :crypto.hash(:sha256, combined)
-
-    # CIDv1 format: base32-encoded multihash
-    encoded = Base.encode32(final_hash, case: :lower, padding: false)
-    "bafkrei" <> String.slice(encoded, 0..50)
   end
 
   @doc """
