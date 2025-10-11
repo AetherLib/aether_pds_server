@@ -35,26 +35,29 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
 
         case Repositories.create_blob(blob_attrs) do
           {:ok, _blob} ->
+            # IMPORTANT: Key order matters for Bluesky's parser
+            # Must match official PDS response format exactly
             response = %{
               blob: %{
                 "$type" => "blob",
-                ref: %{
+                "ref" => %{
                   "$link" => cid
                 },
-                mimeType: mime_type,
-                size: size
+                "mimeType" => mime_type,
+                "size" => size
               }
             }
 
             Logger.info("Blob upload success - sending response with original conn")
 
             # Encode JSON and send with explicit content-length
-            # Bluesky client requires content-length header
+            # Bluesky client requires exact byte-perfect response
             json_body = Jason.encode!(response)
             content_length = byte_size(json_body)
 
             Logger.info("Sending response - body size: #{content_length} bytes")
             Logger.info("Response JSON: #{json_body}")
+            Logger.info("Response bytes (hex): #{Base.encode16(json_body)}")
 
             conn
             |> delete_resp_header("content-type")
