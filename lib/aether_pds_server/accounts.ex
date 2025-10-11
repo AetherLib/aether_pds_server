@@ -116,11 +116,14 @@ defmodule AetherPDSServer.Accounts do
   defp generate_mst_cid(%Aether.ATProto.MST{}) do
     alias Aether.ATProto.CID
 
-    # Generate CID for empty MST
-    # In production, this would be the actual CBOR-encoded MST data
-    hash = :crypto.hash(:sha256, "empty_mst")
-    hash_encoded = Base.encode32(hash, case: :lower, padding: false)
-    cid_string = "bafyrei" <> String.slice(hash_encoded, 0..50)
+    # Generate CID for empty MST using proper CID generation
+    # MST blocks use dag-cbor codec
+    empty_mst_data = CBOR.encode(%{
+      layer: 0,
+      entries: []
+    })
+
+    cid_string = CID.from_data(empty_mst_data, "dag-cbor")
 
     case CID.parse_cid(cid_string) do
       {:ok, cid} -> cid
