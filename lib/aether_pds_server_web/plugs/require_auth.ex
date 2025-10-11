@@ -18,7 +18,8 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
       # DPoP-bound token (OAuth flow)
       "DPoP " <> token when not is_nil(dpop_header) ->
         method = conn.method
-        url = build_request_url(conn)
+        # Build URL using endpoint configuration (handles reverse proxy correctly)
+        url = build_url_from_endpoint(conn)
         Logger.info("DPoP validation - Method: #{method}, URL: #{url}")
 
         case OAuth.validate_access_token(token, dpop_header, method, url) do
@@ -52,16 +53,14 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
     end
   end
 
-  defp build_request_url(conn) do
-    # Check x-forwarded-proto header for reverse proxy support
-    scheme = case get_req_header(conn, "x-forwarded-proto") do
-      ["https" | _] -> "https"
-      ["http" | _] -> "http"
-      _ -> if conn.scheme == :https, do: "https", else: "http"
-    end
+  defp build_url_from_endpoint(conn) do
+    # Use the endpoint's configured URL settings
+    endpoint_config = Application.get_env(:aether_pds_server, AetherPDSServerWeb.Endpoint)
+    url_config = endpoint_config[:url] || []
 
-    host = conn.host
-    port = conn.port
+    scheme = Keyword.get(url_config, :scheme, "https")
+    host = Keyword.get(url_config, :host, conn.host)
+    port = Keyword.get(url_config, :port, 443)
 
     port_suffix =
       cond do
