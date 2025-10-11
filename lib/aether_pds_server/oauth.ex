@@ -379,6 +379,28 @@ defmodule AetherPDSServer.OAuth do
   # ============================================================================
 
   @doc """
+  Validate client metadata document (for PAR endpoint).
+
+  For PAR, we only need to validate that the client_id is a valid URL.
+  The full metadata fetch will happen during the authorization flow.
+  """
+  def validate_client_metadata(client_id) when is_binary(client_id) do
+    cond do
+      String.starts_with?(client_id, "http://localhost") or
+          String.starts_with?(client_id, "http://127.0.0.1") ->
+        {:ok, %{id: client_id, type: :loopback}}
+
+      String.starts_with?(client_id, "http://") or String.starts_with?(client_id, "https://") ->
+        {:ok, %{id: client_id, type: :web}}
+
+      true ->
+        {:error, :invalid_client}
+    end
+  end
+
+  def validate_client_metadata(_), do: {:error, :invalid_client}
+
+  @doc """
   Validate that client_id and redirect_uri match the authorization code.
   """
   def validate_client_match(client_id, redirect_uri, auth_code_data) do

@@ -42,6 +42,9 @@ defmodule AetherPDSServerWeb.Router do
     # did:web resolution endpoint
     get "/.well-known/did.json", ComATProto.IdentityController, :well_known_did_json
 
+    # PAR (Pushed Authorization Request) endpoint
+    post "/oauth/par", OAuthController, :pushed_authorization_request
+
     # Token endpoints
     post "/oauth/token", OAuthController, :token
     post "/oauth/revoke", OAuthController, :revoke

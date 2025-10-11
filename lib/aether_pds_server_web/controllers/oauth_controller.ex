@@ -32,26 +32,98 @@ defmodule AetherPDSServerWeb.OAuthController do
   @doc """
   GET /.well-known/oauth-authorization-server
 
-  Returns OAuth server metadata (RFC 8414)
+  Returns OAuth server metadata (RFC 8414) for ATProto
   """
   def metadata(conn, _params) do
     base_url = AetherPDSServerWeb.Endpoint.url()
 
     metadata = %{
       issuer: base_url,
+      # PAR (Pushed Authorization Request) endpoint - required for ATProto
+      pushed_authorization_request_endpoint: "#{base_url}/oauth/par",
       authorization_endpoint: "#{base_url}/oauth/authorize",
       token_endpoint: "#{base_url}/oauth/token",
+      revocation_endpoint: "#{base_url}/oauth/revoke",
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code", "refresh_token"],
       code_challenge_methods_supported: ["S256"],
-      token_endpoint_auth_methods_supported: ["none"],
+      # ATProto requires support for both 'none' and 'private_key_jwt'
+      token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
+      token_endpoint_auth_signing_alg_values_supported: ["ES256"],
       dpop_signing_alg_values_supported: ["ES256"],
       scopes_supported: ["atproto", "transition:generic", "transition:chat.bsky"],
       authorization_response_iss_parameter_supported: true,
-      require_pushed_authorization_requests: false
+      # ATProto requires PAR to be required
+      require_pushed_authorization_requests: true,
+      # Support for client metadata documents (required for ATProto)
+      client_id_metadata_document_supported: true
     }
 
     json(conn, metadata)
+  end
+
+  # ============================================================================
+  # PAR (Pushed Authorization Request) - RFC 9126
+  # ============================================================================
+
+  @doc """
+  POST /oauth/par
+
+  Pushed Authorization Request endpoint. Clients push authorization parameters
+  and receive a request_uri to use in the authorization redirect.
+  """
+  def pushed_authorization_request(conn, params) do
+    with {:ok, validated_params} <- validate_par_params(params),
+         {:ok, _client} <-
+           OAuth.validate_client_metadata(validated_params[:client_id]),
+         :ok <-
+           validate_pkce(
+             validated_params[:code_challenge],
+             validated_params[:code_challenge_method]
+           ) do
+      # Generate request_uri (short-lived reference to the pushed request)
+      request_uri = "urn:ietf:params:oauth:request_uri:#{generate_request_uri()}"
+
+      # Store the authorization request parameters temporarily (5 minutes expiry)
+      # In production, use a proper cache like Redis or ETS
+      try do
+        :ets.new(:par_requests, [:set, :public, :named_table])
+      rescue
+        ArgumentError -> :ok
+      end
+
+      :ets.insert(:par_requests, {request_uri, validated_params, System.system_time(:second)})
+
+      response = %{
+        request_uri: request_uri,
+        expires_in: 300
+      }
+
+      json(conn, response)
+    else
+      {:error, :invalid_client} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{
+          error: "invalid_client",
+          error_description: "Invalid client_id or client metadata"
+        })
+
+      {:error, :invalid_request} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{
+          error: "invalid_request",
+          error_description: "Missing or invalid parameters"
+        })
+
+      {:error, reason} ->
+        Logger.error("PAR request failed: #{inspect(reason)}")
+
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "invalid_request", error_description: "PAR request failed"})
+    end
   end
 
   # ============================================================================
@@ -61,9 +133,25 @@ defmodule AetherPDSServerWeb.OAuthController do
   @doc """
   GET /oauth/authorize
 
-  Authorization endpoint - displays consent screen or login
+  Authorization endpoint - displays consent screen or login.
+  Supports both direct parameters and request_uri from PAR.
   """
   def authorize(conn, params) do
+    # Check if this is a PAR-based request (has request_uri)
+    actual_params =
+      case Map.get(params, "request_uri") do
+        nil ->
+          params
+
+        request_uri ->
+          # Fetch parameters from PAR storage
+          case lookup_par_request(request_uri) do
+            {:ok, stored_params} -> stored_params
+            {:error, _} -> params
+          end
+      end
+
+
     with {:ok, validated_params} <- validate_authorization_params(params),
          {:ok, client} <-
            OAuth.validate_client(
@@ -502,5 +590,61 @@ defmodule AetherPDSServerWeb.OAuthController do
       client: client,
       scope: oauth_request.scope
     )
+  end
+
+  # PAR helper functions
+
+  defp validate_par_params(params) do
+    required = [
+      "response_type",
+      "client_id",
+      "redirect_uri",
+      "state",
+      "code_challenge",
+      "code_challenge_method",
+      "scope"
+    ]
+
+    if Enum.all?(required, &Map.has_key?(params, &1)) do
+      if params["response_type"] == "code" do
+        {:ok,
+         %{
+           response_type: params["response_type"],
+           client_id: params["client_id"],
+           redirect_uri: params["redirect_uri"],
+           state: params["state"],
+           code_challenge: params["code_challenge"],
+           code_challenge_method: params["code_challenge_method"],
+           scope: params["scope"]
+         }}
+      else
+        {:error, :invalid_request}
+      end
+    else
+      {:error, :invalid_request}
+    end
+  end
+
+  defp generate_request_uri do
+    :crypto.strong_rand_bytes(32)
+    |> Base.url_encode64(padding: false)
+  end
+
+  defp lookup_par_request(request_uri) do
+    case :ets.lookup(:par_requests, request_uri) do
+      [{^request_uri, params, timestamp}] ->
+        # Check if expired (5 minutes = 300 seconds)
+        if System.system_time(:second) - timestamp < 300 do
+          # Delete after use (single-use)
+          :ets.delete(:par_requests, request_uri)
+          {:ok, params}
+        else
+          :ets.delete(:par_requests, request_uri)
+          {:error, :expired}
+        end
+
+      [] ->
+        {:error, :not_found}
+    end
   end
 end
