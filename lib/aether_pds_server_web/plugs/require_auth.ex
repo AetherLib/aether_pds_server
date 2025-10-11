@@ -4,11 +4,33 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
   import Phoenix.Controller
   require Logger
 
+  alias AetherPDSServer.OAuth
+
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    case get_req_header(conn, "authorization") do
-      ["Bearer " <> token] ->
+    auth_header = get_req_header(conn, "authorization") |> List.first()
+    dpop_header = get_req_header(conn, "dpop") |> List.first()
+
+    case auth_header do
+      # DPoP-bound token (OAuth flow)
+      "DPoP " <> token when not is_nil(dpop_header) ->
+        method = conn.method
+        url = request_url(conn)
+
+        case OAuth.validate_access_token(token, dpop_header, method, url) do
+          {:ok, token_data} ->
+            conn
+            |> assign(:current_did, token_data.did)
+            |> assign(:authenticated, true)
+
+          {:error, reason} ->
+            Logger.debug("DPoP token validation failed: #{inspect(reason)}")
+            send_auth_error(conn)
+        end
+
+      # Legacy Bearer token (simple JWT - for backwards compatibility)
+      "Bearer " <> token ->
         case AetherPDSServer.Token.verify_token(token) do
           {:ok, claims} ->
             did = claims["sub"]
@@ -17,13 +39,32 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
             |> assign(:current_did, did)
             |> assign(:authenticated, true)
 
-          {:error, reason} ->
+          {:error, _reason} ->
             send_auth_error(conn)
         end
 
       _ ->
+        Logger.debug("No valid authorization header found")
         send_auth_error(conn)
     end
+  end
+
+  defp request_url(conn) do
+    scheme = if conn.scheme == :https, do: "https", else: "http"
+    host = conn.host
+    port = conn.port
+
+    port_suffix =
+      cond do
+        scheme == "https" and port == 443 -> ""
+        scheme == "http" and port == 80 -> ""
+        true -> ":#{port}"
+      end
+
+    path = conn.request_path
+    query = if conn.query_string != "", do: "?#{conn.query_string}", else: ""
+
+    "#{scheme}://#{host}#{port_suffix}#{path}#{query}"
   end
 
   defp send_auth_error(conn) do
