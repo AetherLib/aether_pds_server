@@ -19,7 +19,7 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
 
     # Stream upload to MinIO while calculating CID
     case MinioStorage.upload_blob(conn, did, mime_type) do
-      {:ok, cid, size, storage_key} ->
+      {:ok, updated_conn, cid, size, storage_key} ->
         # Store metadata in database
         blob_attrs = %{
           repository_did: did,
@@ -42,7 +42,7 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
               }
             }
 
-            json(conn, response)
+            json(updated_conn, response)
 
           {:error, changeset} ->
             Logger.error("Failed to save blob metadata: #{inspect(changeset)}")

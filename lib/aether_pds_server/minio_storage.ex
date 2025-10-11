@@ -14,14 +14,14 @@ defmodule AetherPDSServer.MinioStorage do
   @doc """
   Stream upload a blob to MinIO and calculate its CID.
 
-  Returns {:ok, cid, size} or {:error, reason}
+  Returns {:ok, conn, cid, size, storage_key} or {:error, reason}
   """
   def upload_blob(conn, repository_did, mime_type) do
     storage_key = generate_storage_key(repository_did)
 
     case stream_to_minio(conn, storage_key, mime_type) do
-      {:ok, cid, size} ->
-        {:ok, cid, size, storage_key}
+      {:ok, updated_conn, cid, size} ->
+        {:ok, updated_conn, cid, size, storage_key}
 
       {:error, reason} = error ->
         Logger.error("Failed to upload blob to MinIO: #{inspect(reason)}")
@@ -113,9 +113,9 @@ defmodule AetherPDSServer.MinioStorage do
 
     # Read body in chunks and stream to MinIO
     case stream_body_to_minio(conn, storage_key, mime_type, hash_state, 0, config) do
-      {:ok, final_hash, total_size} ->
+      {:ok, updated_conn, final_hash, total_size} ->
         cid = finalize_cid(final_hash, storage_key)
-        {:ok, cid, total_size}
+        {:ok, updated_conn, cid, total_size}
 
       {:error, _reason} = error ->
         error
@@ -128,11 +128,11 @@ defmodule AetherPDSServer.MinioStorage do
   defp stream_body_to_minio(conn, storage_key, mime_type, hash_state, total_size, config) do
     # Collect all chunks first to calculate content-length
     case collect_body_chunks(conn, hash_state, total_size, []) do
-      {:ok, body_data, final_hash, final_size} ->
+      {:ok, updated_conn, body_data, final_hash, final_size} ->
         # Now upload to MinIO with proper content-length
         case upload_to_minio(storage_key, body_data, mime_type, final_size, config) do
           :ok ->
-            {:ok, final_hash, final_size}
+            {:ok, updated_conn, final_hash, final_size}
 
           {:error, reason} ->
             {:error, reason}
@@ -148,12 +148,12 @@ defmodule AetherPDSServer.MinioStorage do
   """
   defp collect_body_chunks(conn, hash_state, total_size, chunks) do
     case Plug.Conn.read_body(conn, length: 1_000_000) do
-      {:ok, data, _conn} ->
+      {:ok, data, updated_conn} ->
         # Last chunk
         new_hash = :crypto.hash_update(hash_state, data)
         all_chunks = [data | chunks] |> Enum.reverse()
         body_data = IO.iodata_to_binary(all_chunks)
-        {:ok, body_data, new_hash, total_size + byte_size(data)}
+        {:ok, updated_conn, body_data, new_hash, total_size + byte_size(data)}
 
       {:more, data, conn} ->
         # More chunks coming
