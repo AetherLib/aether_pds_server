@@ -51,18 +51,17 @@ defmodule AetherPDSServerWeb.Router do
   end
 
   # OAuth UI routes (login and consent pages)
-  scope "/oauth", AetherPDSServerWeb do
+  scope "/", AetherPDSServerWeb do
     pipe_through [:browser]
 
     live "/", HomeLive, :index
     live "/register", RegisterLive, :index
-    live "/oauth/login", LoginLive, :index
+    # live "/oauth/login", LoginLive, :index
     live "/oauth/authorize/consent", ConsentLive, :index
-
-    get "/authorize", OAuthController, :authorize
-    get "/login", OAuthController, :login_page
-    post "/login", OAuthController, :login
-    post "/authorize/consent", OAuthController, :consent
+    get "/oauth/authorize", OAuthController, :authorize
+    get "/oauth/login", OAuthController, :login_page
+    post "/oauth/login", OAuthController, :login
+    post "/oauth/authorize/consent", OAuthController, :consent
   end
 
   # ============================================================================
