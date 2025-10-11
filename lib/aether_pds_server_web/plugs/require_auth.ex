@@ -12,6 +12,8 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
     auth_header = get_req_header(conn, "authorization") |> List.first()
     dpop_header = get_req_header(conn, "dpop") |> List.first()
 
+    Logger.info("Auth attempt - Authorization: #{inspect(auth_header)}, DPoP: #{inspect(dpop_header)}")
+
     case auth_header do
       # DPoP-bound token (OAuth flow)
       "DPoP " <> token when not is_nil(dpop_header) ->
@@ -25,7 +27,7 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
             |> assign(:authenticated, true)
 
           {:error, reason} ->
-            Logger.debug("DPoP token validation failed: #{inspect(reason)}")
+            Logger.info("DPoP token validation failed: #{inspect(reason)}")
             send_auth_error(conn)
         end
 
@@ -44,7 +46,7 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
         end
 
       _ ->
-        Logger.debug("No valid authorization header found")
+        Logger.info("No valid authorization header found")
         send_auth_error(conn)
     end
   end
