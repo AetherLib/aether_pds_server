@@ -1,4 +1,3 @@
-# lib/aether_pds_server_web/controllers/identity_controller.ex
 defmodule AetherPDSServerWeb.ComATProto.IdentityController do
   use AetherPDSServerWeb, :controller
 
@@ -50,48 +49,28 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
 
     # Look up the account by handle
     case Accounts.get_account_by_handle(host) do
-      %{did: did, handle: handle} = account ->
+      %{did: did, handle: handle} = _account ->
         # Get the PDS endpoint from the application config
-        pds_endpoint = AetherPDSServerWeb.Endpoint.url()
+        pds_endpoint = get_pds_endpoint()
 
-        # Get the public key for the account (you'll need to implement this)
-        case get_account_public_key(account) do
-          {:ok, public_key_multibase} ->
-            # Generate the compliant DID document
-            did_doc = %{
-              "@context" => [
-                "https://www.w3.org/ns/did/v1",
-                "https://w3id.org/security/multikey/v1"
-              ],
-              "id" => did,
-              "alsoKnownAs" => ["at://#{handle}"],
-              "verificationMethod" => [
-                %{
-                  "id" => "#{did}#atproto",
-                  "type" => "Multikey",
-                  "controller" => did,
-                  "publicKeyMultibase" => public_key_multibase
-                }
-              ],
-              "service" => [
-                %{
-                  "id" => "#{did}#atproto_pds",
-                  "type" => "AtprotoPersonalDataServer",
-                  "serviceEndpoint" => pds_endpoint
-                }
-              ]
+        # Generate the DID document
+        did_doc = %{
+          "@context" => [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/secp256k1-2019/v1"
+          ],
+          "id" => did,
+          "alsoKnownAs" => ["at://#{handle}"],
+          "service" => [
+            %{
+              "id" => "#atproto_pds",
+              "type" => "AtprotoPersonalDataServer",
+              "serviceEndpoint" => pds_endpoint
             }
+          ]
+        }
 
-            json(conn, did_doc)
-
-          {:error, :public_key_not_found} ->
-            conn
-            |> put_status(:internal_server_error)
-            |> json(%{
-              error: "ConfigurationError",
-              message: "Public key not configured for account"
-            })
-        end
+        json(conn, did_doc)
 
       nil ->
         conn
@@ -103,56 +82,30 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
   @doc """
   GET /xrpc/com.atproto.identity.resolveHandle
 
-  Resolve a handle to a DID (local or remote) with bidirectional validation
+  Resolve a handle to a DID (local or remote)
   """
   def resolve_handle(conn, %{"handle" => handle}) do
-    # Validate handle format first
-    if not valid_handle?(handle) do
-      handle_error(conn, :bad_request, "InvalidHandle", "Invalid handle format")
-    else
-      # Try local resolution first
-      case Accounts.get_account_by_handle(handle) do
-        %{did: did} ->
-          json(conn, %{did: did})
+    # Try local resolution first
+    case Accounts.get_account_by_handle(handle) do
+      %{did: did} ->
+        json(conn, %{did: did})
 
-        nil ->
-          # Try remote resolution via DIDResolver
-          case DIDResolver.resolve_handle(handle) do
-            {:ok, remote_did} ->
-              # Perform bidirectional validation
-              case validate_handle_bidirectional(handle, remote_did) do
-                {:ok, true} ->
-                  json(conn, %{did: remote_did})
+      nil ->
+        # Try remote resolution via DIDResolver
+        case DIDResolver.resolve_handle(handle) do
+          {:ok, did} ->
+            json(conn, %{did: did})
 
-                {:ok, false} ->
-                  handle_error(
-                    conn,
-                    :not_found,
-                    "HandleNotFound",
-                    "Handle not confirmed by DID document"
-                  )
+          {:error, :handle_resolution_failed} ->
+            conn
+            |> put_status(:not_found)
+            |> json(%{error: "HandleNotFound", message: "Handle not found"})
 
-                {:error, reason} ->
-                  handle_error(
-                    conn,
-                    :bad_request,
-                    "ResolutionError",
-                    "Failed to validate handle: #{reason}"
-                  )
-              end
-
-            {:error, :handle_resolution_failed} ->
-              handle_error(conn, :not_found, "HandleNotFound", "Handle not found")
-
-            {:error, reason} ->
-              handle_error(
-                conn,
-                :bad_request,
-                "InvalidRequest",
-                "Failed to resolve handle: #{reason}"
-              )
-          end
-      end
+          {:error, _reason} ->
+            conn
+            |> put_status(:bad_request)
+            |> json(%{error: "InvalidRequest", message: "Failed to resolve handle"})
+        end
     end
   end
 
@@ -162,74 +115,43 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
   Resolve a DID to a DID document
   """
   def resolve_did(conn, %{"did" => did}) do
-    # Validate DID format
-    if not valid_did?(did) do
-      handle_error(conn, :bad_request, "InvalidDID", "Invalid DID format")
-    else
-      case DIDResolver.resolve_did(did) do
-        {:ok, did_doc} ->
-          json(conn, did_doc)
-
-        {:error, :did_resolution_failed} ->
-          handle_error(conn, :not_found, "DIDNotFound", "DID not found")
-
-        {:error, :unsupported_did_method} ->
-          handle_error(conn, :bad_request, "UnsupportedDIDMethod", "DID method not supported")
-
-        {:error, reason} ->
-          handle_error(conn, :bad_request, "InvalidRequest", "Failed to resolve DID: #{reason}")
-      end
-    end
-  end
-
-  defp get_account_public_key(account) do
-    # You need to implement this function based on your key management
-    # This should return the public key in multibase format
-    # Example implementation:
-    case Accounts.get_public_signing_key(account) do
-      nil -> {:error, :public_key_not_found}
-      public_key -> {:ok, public_key}
-    end
-
-    # If you don't have key management implemented yet, you can use this placeholder:
-    # {:ok, "z" <> Base.encode64(:crypto.strong_rand_bytes(32))}
-  end
-
-  defp validate_handle_bidirectional(handle, did) do
-    # Resolve the DID to get its document
     case DIDResolver.resolve_did(did) do
-      {:ok, did_document} ->
-        # Check if the handle appears in the alsoKnownAs array
-        is_valid = handle_in_also_known_as?(did_document, handle)
-        {:ok, is_valid}
+      {:ok, did_doc} ->
+        json(conn, did_doc)
 
-      {:error, reason} ->
-        {:error, reason}
+      {:error, :did_resolution_failed} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "DIDNotFound", message: "DID not found"})
+
+      {:error, :unsupported_did_method} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "UnsupportedDIDMethod", message: "DID method not supported"})
+
+      {:error, _reason} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "InvalidRequest", message: "Failed to resolve DID"})
     end
   end
 
-  defp handle_in_also_known_as?(%{"alsoKnownAs" => also_known_as}, handle)
-       when is_list(also_known_as) do
-    expected_handle_uri = "at://#{handle}"
-    Enum.any?(also_known_as, fn uri -> uri == expected_handle_uri end)
-  end
+  # Private helper to get PDS endpoint
+  defp get_pds_endpoint do
+    endpoint_config = Application.get_env(:aether_pds_server, AetherPDSServerWeb.Endpoint)
+    url_config = Keyword.get(endpoint_config, :url, [])
+    host = Keyword.get(url_config, :host, "localhost")
+    port = Keyword.get(url_config, :port, 4000)
+    scheme = if Keyword.get(url_config, :scheme) == "https", do: "https", else: "http"
 
-  defp handle_in_also_known_as?(_, _), do: false
+    # Only include port if it's not the default for the scheme
+    port_suffix =
+      cond do
+        scheme == "https" and port == 443 -> ""
+        scheme == "http" and port == 80 -> ""
+        true -> ":#{port}"
+      end
 
-  defp valid_handle?(handle) do
-    # Basic handle validation - you might want to enhance this
-    is_binary(handle) and String.length(handle) > 0 and String.length(handle) <= 253 and
-      String.match?(handle, ~r/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)
-  end
-
-  defp valid_did?(did) do
-    # Basic DID validation
-    is_binary(did) and String.match?(did, ~r/^did:[a-z0-9]+:[a-zA-Z0-9._:%-]+$/)
-  end
-
-  defp handle_error(conn, status, error_type, message) do
-    conn
-    |> put_status(status)
-    |> json(%{error: error_type, message: message})
+    "#{scheme}://#{host}#{port_suffix}"
   end
 end
