@@ -107,52 +107,52 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
   """
   def resolve_handle(conn, %{"handle" => handle}) do
     # Validate handle format first
-    unless valid_handle?(handle) do
-      return(handle_error(conn, :bad_request, "InvalidHandle", "Invalid handle format"))
-    end
+    if not valid_handle?(handle) do
+      handle_error(conn, :bad_request, "InvalidHandle", "Invalid handle format")
+    else
+      # Try local resolution first
+      case Accounts.get_account_by_handle(handle) do
+        %{did: did} ->
+          json(conn, %{did: did})
 
-    # Try local resolution first
-    case Accounts.get_account_by_handle(handle) do
-      %{did: did} ->
-        json(conn, %{did: did})
+        nil ->
+          # Try remote resolution via DIDResolver
+          case DIDResolver.resolve_handle(handle) do
+            {:ok, remote_did} ->
+              # Perform bidirectional validation
+              case validate_handle_bidirectional(handle, remote_did) do
+                {:ok, true} ->
+                  json(conn, %{did: remote_did})
 
-      nil ->
-        # Try remote resolution via DIDResolver
-        case DIDResolver.resolve_handle(handle) do
-          {:ok, remote_did} ->
-            # Perform bidirectional validation
-            case validate_handle_bidirectional(handle, remote_did) do
-              {:ok, true} ->
-                json(conn, %{did: remote_did})
+                {:ok, false} ->
+                  handle_error(
+                    conn,
+                    :not_found,
+                    "HandleNotFound",
+                    "Handle not confirmed by DID document"
+                  )
 
-              {:ok, false} ->
-                handle_error(
-                  conn,
-                  :not_found,
-                  "HandleNotFound",
-                  "Handle not confirmed by DID document"
-                )
+                {:error, reason} ->
+                  handle_error(
+                    conn,
+                    :bad_request,
+                    "ResolutionError",
+                    "Failed to validate handle: #{reason}"
+                  )
+              end
 
-              {:error, reason} ->
-                handle_error(
-                  conn,
-                  :bad_request,
-                  "ResolutionError",
-                  "Failed to validate handle: #{reason}"
-                )
-            end
+            {:error, :handle_resolution_failed} ->
+              handle_error(conn, :not_found, "HandleNotFound", "Handle not found")
 
-          {:error, :handle_resolution_failed} ->
-            handle_error(conn, :not_found, "HandleNotFound", "Handle not found")
-
-          {:error, reason} ->
-            handle_error(
-              conn,
-              :bad_request,
-              "InvalidRequest",
-              "Failed to resolve handle: #{reason}"
-            )
-        end
+            {:error, reason} ->
+              handle_error(
+                conn,
+                :bad_request,
+                "InvalidRequest",
+                "Failed to resolve handle: #{reason}"
+              )
+          end
+      end
     end
   end
 
@@ -163,22 +163,22 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
   """
   def resolve_did(conn, %{"did" => did}) do
     # Validate DID format
-    unless valid_did?(did) do
-      return(handle_error(conn, :bad_request, "InvalidDID", "Invalid DID format"))
-    end
+    if not valid_did?(did) do
+      handle_error(conn, :bad_request, "InvalidDID", "Invalid DID format")
+    else
+      case DIDResolver.resolve_did(did) do
+        {:ok, did_doc} ->
+          json(conn, did_doc)
 
-    case DIDResolver.resolve_did(did) do
-      {:ok, did_doc} ->
-        json(conn, did_doc)
+        {:error, :did_resolution_failed} ->
+          handle_error(conn, :not_found, "DIDNotFound", "DID not found")
 
-      {:error, :did_resolution_failed} ->
-        handle_error(conn, :not_found, "DIDNotFound", "DID not found")
+        {:error, :unsupported_did_method} ->
+          handle_error(conn, :bad_request, "UnsupportedDIDMethod", "DID method not supported")
 
-      {:error, :unsupported_did_method} ->
-        handle_error(conn, :bad_request, "UnsupportedDIDMethod", "DID method not supported")
-
-      {:error, reason} ->
-        handle_error(conn, :bad_request, "InvalidRequest", "Failed to resolve DID: #{reason}")
+        {:error, reason} ->
+          handle_error(conn, :bad_request, "InvalidRequest", "Failed to resolve DID: #{reason}")
+      end
     end
   end
 
@@ -251,12 +251,13 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
 
   defp valid_handle?(handle) do
     # Basic handle validation - you might want to enhance this
-    is_binary(handle) and String.length(handle) > 0 and String.length(handle) <= 253
+    is_binary(handle) and String.length(handle) > 0 and String.length(handle) <= 253 and
+      String.match?(handle, ~r/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)
   end
 
   defp valid_did?(did) do
     # Basic DID validation
-    is_binary(did) and String.match?(did, ~r/^did:[a-z0-9]+:[a-zA-Z0-9._-]+$/)
+    is_binary(did) and String.match?(did, ~r/^did:[a-z0-9]+:[a-zA-Z0-9._:%-]+$/)
   end
 
   defp handle_error(conn, status, error_type, message) do
