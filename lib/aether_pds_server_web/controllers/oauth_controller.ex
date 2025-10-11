@@ -147,8 +147,7 @@ defmodule AetherPDSServerWeb.OAuthController do
           end
       end
 
-
-    with {:ok, validated_params} <- validate_authorization_params(params),
+    with {:ok, validated_params} <- validate_authorization_params(actual_params),
          {:ok, client} <-
            OAuth.validate_client(
              validated_params.client_id,
