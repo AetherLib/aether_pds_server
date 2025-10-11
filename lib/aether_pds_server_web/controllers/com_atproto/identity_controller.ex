@@ -52,7 +52,7 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
     case Accounts.get_account_by_handle(host) do
       %{did: did, handle: handle} = account ->
         # Get the PDS endpoint from the application config
-        pds_endpoint = get_pds_endpoint()
+        pds_endpoint = AetherPDSServerWeb.Endpoint.url()
 
         # Get the public key for the account (you'll need to implement this)
         case get_account_public_key(account) do
@@ -179,39 +179,6 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
         {:error, reason} ->
           handle_error(conn, :bad_request, "InvalidRequest", "Failed to resolve DID: #{reason}")
       end
-    end
-  end
-
-  # Private helper functions
-
-  defp get_pds_endpoint do
-    # Get the configured PDS endpoint from the application environment
-    # Falls back to constructing from endpoint config
-    case Application.get_env(:aether_pds_server, :pds_endpoint) do
-      nil ->
-        # Construct from endpoint config
-        endpoint_config = Application.get_env(:aether_pds_server, AetherPDSServerWeb.Endpoint)
-        url_config = Keyword.get(endpoint_config, :url, [])
-        host = Keyword.get(url_config, :host, "localhost")
-        port = Keyword.get(url_config, :port, 4000)
-
-        # In production, we should use HTTPS
-        scheme =
-          if Mix.env() == :prod, do: "https", else: Keyword.get(url_config, :scheme, "http")
-
-        # Only include port if it's not the default for the scheme
-        port_suffix =
-          cond do
-            scheme == "https" and port == 443 -> ""
-            scheme == "http" and port == 80 -> ""
-            true -> ":#{port}"
-          end
-
-        "#{scheme}://#{host}#{port_suffix}"
-
-      endpoint ->
-        # Ensure the endpoint doesn't have a trailing slash or path
-        String.trim_trailing(endpoint, "/")
     end
   end
 
