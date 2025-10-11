@@ -47,15 +47,42 @@ defmodule AetherPDSServer.DIDResolver do
   Resolves a DID to its DID document.
 
   Supports:
-  - did:plc (via plc.directory)
-  - did:web (via HTTPS .well-known/did.json)
+  - did:web (via local lookup or HTTPS .well-known/did.json)
+  - did:plc (via plc.directory) - for external/legacy DIDs
 
   ## Examples
 
-      iex> resolve_did("did:plc:abc123...")
-      {:ok, %{"id" => "did:plc:abc123...", ...}}
+      iex> resolve_did("did:web:alice.aetherlib.org")
+      {:ok, %{"id" => "did:web:alice.aetherlib.org", ...}}
   """
+  def resolve_did("did:web:" <> domain) do
+    # Try local resolution first for our own accounts
+    case resolve_local_did_web(domain) do
+      {:ok, did_doc} ->
+        {:ok, did_doc}
+
+      {:error, :not_local} ->
+        # Fall back to HTTPS resolution for external DIDs
+        url = "https://#{domain}/.well-known/did.json"
+
+        case http_get(url) do
+          {:ok, %{status: 200, body: did_doc}} when is_map(did_doc) ->
+            Logger.debug("Resolved did:web document for #{domain}")
+            {:ok, did_doc}
+
+          {:ok, %{status: status}} ->
+            Logger.error("Failed to resolve did:web #{domain}: HTTP #{status}")
+            {:error, :did_resolution_failed}
+
+          {:error, reason} ->
+            Logger.error("Failed to resolve did:web #{domain}: #{inspect(reason)}")
+            {:error, :did_resolution_failed}
+        end
+    end
+  end
+
   def resolve_did("did:plc:" <> _ = did) do
+    # Legacy support for did:plc (external DIDs only)
     url = "https://plc.directory/#{did}"
 
     case http_get(url) do
@@ -69,24 +96,6 @@ defmodule AetherPDSServer.DIDResolver do
 
       {:error, reason} ->
         Logger.error("Failed to resolve DID #{did}: #{inspect(reason)}")
-        {:error, :did_resolution_failed}
-    end
-  end
-
-  def resolve_did("did:web:" <> domain) do
-    url = "https://#{domain}/.well-known/did.json"
-
-    case http_get(url) do
-      {:ok, %{status: 200, body: did_doc}} when is_map(did_doc) ->
-        Logger.debug("Resolved did:web document for #{domain}")
-        {:ok, did_doc}
-
-      {:ok, %{status: status}} ->
-        Logger.error("Failed to resolve did:web #{domain}: HTTP #{status}")
-        {:error, :did_resolution_failed}
-
-      {:error, reason} ->
-        Logger.error("Failed to resolve did:web #{domain}: #{inspect(reason)}")
         {:error, :did_resolution_failed}
     end
   end
@@ -142,6 +151,63 @@ defmodule AetherPDSServer.DIDResolver do
   end
 
   # Private functions
+
+  defp resolve_local_did_web(domain) do
+    # Check if this is one of our local accounts
+    alias AetherPDSServer.Accounts
+    alias AetherPDSServer.DIDDocument
+
+    case Accounts.get_account_by_handle(domain) do
+      nil ->
+        {:error, :not_local}
+
+      account ->
+        # Generate DID document locally without HTTP request
+        pds_endpoint = get_local_pds_endpoint()
+
+        did_doc = %{
+          "@context" => [
+            "https://www.w3.org/ns/did/v1",
+            "https://w3id.org/security/suites/secp256k1-2019/v1"
+          ],
+          "id" => account.did,
+          "alsoKnownAs" => ["at://#{account.handle}"],
+          "service" => [
+            %{
+              "id" => "#atproto_pds",
+              "type" => "AtprotoPersonalDataServer",
+              "serviceEndpoint" => pds_endpoint
+            }
+          ]
+        }
+
+        Logger.debug("Resolved local did:web for #{domain}")
+        {:ok, did_doc}
+    end
+  end
+
+  defp get_local_pds_endpoint do
+    case Application.get_env(:aether_pds_server, :pds_endpoint) do
+      nil ->
+        endpoint_config = Application.get_env(:aether_pds_server, AetherPDSServerWeb.Endpoint)
+        url_config = Keyword.get(endpoint_config, :url, [])
+        host = Keyword.get(url_config, :host, "localhost")
+        port = Keyword.get(url_config, :port, 4000)
+        scheme = if Keyword.get(url_config, :scheme) == "https", do: "https", else: "http"
+
+        port_suffix =
+          cond do
+            scheme == "https" and port == 443 -> ""
+            scheme == "http" and port == 80 -> ""
+            true -> ":#{port}"
+          end
+
+        "#{scheme}://#{host}#{port_suffix}"
+
+      endpoint ->
+        endpoint
+    end
+  end
 
   defp resolve_handle_via_dns(handle) do
     dns_name = ~c"_atproto.#{handle}"
