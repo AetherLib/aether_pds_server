@@ -53,7 +53,13 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
   end
 
   defp build_request_url(conn) do
-    scheme = if conn.scheme == :https, do: "https", else: "http"
+    # Check x-forwarded-proto header for reverse proxy support
+    scheme = case get_req_header(conn, "x-forwarded-proto") do
+      ["https" | _] -> "https"
+      ["http" | _] -> "http"
+      _ -> if conn.scheme == :https, do: "https", else: "http"
+    end
+
     host = conn.host
     port = conn.port
 
