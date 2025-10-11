@@ -49,13 +49,18 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
             # Manually encode and send response with explicit headers
             # This ensures proper handling through HTTP/2 proxies like Cloudflare
             json_body = Jason.encode!(response)
+            Logger.info("Encoded JSON body: #{json_body} (#{byte_size(json_body)} bytes)")
 
-            conn
-            |> put_resp_header("content-type", "application/json; charset=utf-8")
-            |> put_resp_header("content-length", Integer.to_string(byte_size(json_body)))
-            |> put_resp_header("cache-control", "no-cache, no-store, must-revalidate")
-            |> resp(200, json_body)
-            |> send_resp()
+            result =
+              conn
+              |> put_resp_header("content-type", "application/json; charset=utf-8")
+              |> put_resp_header("content-length", Integer.to_string(byte_size(json_body)))
+              |> put_resp_header("cache-control", "no-cache, no-store, must-revalidate")
+              |> resp(200, json_body)
+              |> send_resp()
+
+            Logger.info("Response sent - state: #{inspect(result.state)}, resp_body present: #{inspect(result.resp_body != nil && result.resp_body != "")}, resp_body size: #{inspect(byte_size(result.resp_body || ""))}")
+            result
 
           {:error, changeset} ->
             Logger.error("Failed to save blob metadata: #{inspect(changeset)}")
