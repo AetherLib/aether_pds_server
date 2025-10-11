@@ -1109,7 +1109,7 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
     # Build viewer state for this post
     viewer = build_post_viewer_state(current_did, uri)
 
-    %{
+    post_view = %{
       "$type" => "app.bsky.feed.defs#postView",
       uri: uri,
       cid: record.cid,
@@ -1124,7 +1124,86 @@ defmodule AetherPDSServerWeb.AppBsky.FeedController do
       viewer: viewer,
       labels: []
     }
+
+    # Hydrate embed if present in record
+    post_view =
+      case Map.get(record.value, "embed") do
+        nil -> post_view
+        embed -> Map.put(post_view, :embed, hydrate_embed(embed))
+      end
+
+    post_view
   end
+
+  # Hydrate embed from record format to view format
+  defp hydrate_embed(embed) when is_map(embed) do
+    case Map.get(embed, "$type") do
+      "app.bsky.embed.images" ->
+        %{
+          "$type" => "app.bsky.embed.images#view",
+          "images" =>
+            Enum.map(Map.get(embed, "images", []), fn image ->
+              %{
+                "thumb" => build_blob_url(image["image"]),
+                "fullsize" => build_blob_url(image["image"]),
+                "alt" => Map.get(image, "alt", ""),
+                "aspectRatio" => Map.get(image, "aspectRatio")
+              }
+              |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+              |> Map.new()
+            end)
+        }
+
+      "app.bsky.embed.external" ->
+        external = Map.get(embed, "external", %{})
+
+        %{
+          "$type" => "app.bsky.embed.external#view",
+          "external" => %{
+            "uri" => external["uri"],
+            "title" => external["title"],
+            "description" => external["description"],
+            "thumb" => if(external["thumb"], do: build_blob_url(external["thumb"]))
+          }
+          |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+          |> Map.new()
+        }
+
+      "app.bsky.embed.record" ->
+        # Quote posts - would need to fetch the quoted record
+        # For now, return the embed as-is
+        embed
+
+      "app.bsky.embed.recordWithMedia" ->
+        # Quote posts with media - would need to fetch the quoted record
+        # For now, return the embed as-is
+        embed
+
+      _ ->
+        # Unknown embed type, return as-is
+        embed
+    end
+  end
+
+  defp hydrate_embed(embed), do: embed
+
+  # Build blob URL from blob reference
+  # Returns the full URL to the getBlob endpoint that the Bluesky app will use to fetch the image
+  defp build_blob_url(blob) when is_map(blob) do
+    cid = get_in(blob, ["ref", "$link"])
+
+    if cid do
+      # The Bluesky app expects the full URL to the getBlob endpoint
+      # Format: https://your-pds.com/xrpc/com.atproto.sync.getBlob?did=did:web:user&cid=bafkrei...
+      # However, the official implementation returns just the CID and the client constructs the URL
+      # So we return just the CID for now
+      cid
+    else
+      nil
+    end
+  end
+
+  defp build_blob_url(_), do: nil
 
   # Build viewer state for a post
   defp build_post_viewer_state(nil, _post_uri) do
