@@ -85,13 +85,8 @@ defmodule AetherPDSServerWeb.OAuthController do
       request_uri = "urn:ietf:params:oauth:request_uri:#{generate_request_uri()}"
 
       # Store the authorization request parameters temporarily (5 minutes expiry)
-      # In production, use a proper cache like Redis or ETS
-      try do
-        :ets.new(:par_requests, [:set, :public, :named_table])
-      rescue
-        ArgumentError -> :ok
-      end
-
+      # Ensure table exists
+      ensure_par_table()
       :ets.insert(:par_requests, {request_uri, validated_params, System.system_time(:second)})
 
       response = %{
@@ -631,6 +626,9 @@ defmodule AetherPDSServerWeb.OAuthController do
   end
 
   defp lookup_par_request(request_uri) do
+    # Ensure table exists
+    ensure_par_table()
+
     case :ets.lookup(:par_requests, request_uri) do
       [{^request_uri, params, timestamp}] ->
         # Check if expired (5 minutes = 300 seconds)
@@ -645,6 +643,14 @@ defmodule AetherPDSServerWeb.OAuthController do
 
       [] ->
         {:error, :not_found}
+    end
+  end
+
+  defp ensure_par_table do
+    try do
+      :ets.new(:par_requests, [:set, :public, :named_table])
+    rescue
+      ArgumentError -> :ok
     end
   end
 end
