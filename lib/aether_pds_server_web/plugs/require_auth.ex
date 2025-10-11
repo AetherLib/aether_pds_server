@@ -19,6 +19,7 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
       "DPoP " <> token when not is_nil(dpop_header) ->
         method = conn.method
         url = build_request_url(conn)
+        Logger.info("DPoP validation - Method: #{method}, URL: #{url}")
 
         case OAuth.validate_access_token(token, dpop_header, method, url) do
           {:ok, token_data} ->
