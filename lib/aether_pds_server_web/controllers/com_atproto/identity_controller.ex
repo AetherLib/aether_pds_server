@@ -49,7 +49,7 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
 
     # Look up the account by handle
     case Accounts.get_account_by_handle(host) do
-      %{did: did, handle: handle} = _account ->
+      %{did: did, handle: handle} = account ->
         # Get the PDS endpoint from the application config
         pds_endpoint = get_pds_endpoint()
 
@@ -68,6 +68,14 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
               "serviceEndpoint" => pds_endpoint
             }
           ]
+          # "verificationMethod" => [
+          #   %{
+          #     "id" => "#{did}#atproto",
+          #     "type" => "Multikey",
+          #     "controller" => did,
+          #     "publicKeyMultibase" => public_key_multibase
+          #   }
+          # ]
         }
 
         json(conn, did_doc)

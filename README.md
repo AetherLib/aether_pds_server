@@ -1,3 +1,5 @@
+#TODO: fix pds_endpoint logic and use the Phoenix App to generate the endpoint for any links that need to be created
+
 # Aether PDS Server
 
 A **Personal Data Server (PDS)** implementation for the AT Protocol (ATProto), built with Phoenix/Elixir. This server provides the core PDS functionality as defined by the [official Bluesky PDS specification](https://github.com/bluesky-social/atproto/tree/main/packages/pds).
