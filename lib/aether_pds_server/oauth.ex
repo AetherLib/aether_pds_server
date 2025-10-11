@@ -5,7 +5,7 @@ defmodule AetherPDSServer.OAuth do
 
   import Ecto.Query
   alias AetherPDSServer.Repo
-  alias AetherPDSServer.OAuth.{AuthorizationCode, AccessToken, RefreshToken}
+  alias AetherPDSServer.OAuth.{AuthorizationCode, AccessToken, RefreshToken, PushedAuthorizationRequest}
   alias Aether.ATProto.Crypto.DPoP
 
   # ============================================================================
@@ -62,6 +62,63 @@ defmodule AetherPDSServer.OAuth do
 
       _ ->
         {:error, :invalid_client}
+    end
+  end
+
+  # ============================================================================
+  # Pushed Authorization Requests (PAR)
+  # ============================================================================
+
+  @doc """
+  Create a pushed authorization request.
+  Returns {:ok, request_uri} on success.
+  """
+  def create_par(params) do
+    request_uri = "urn:ietf:params:oauth:request_uri:#{generate_secure_token(32)}"
+    expires_at = DateTime.add(DateTime.utc_now(), 300, :second)
+
+    attrs =
+      params
+      |> Map.put(:request_uri, request_uri)
+      |> Map.put(:expires_at, expires_at)
+      |> Map.put(:used, false)
+
+    case Repo.insert(PushedAuthorizationRequest.changeset(%PushedAuthorizationRequest{}, attrs)) do
+      {:ok, _par} -> {:ok, request_uri}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  @doc """
+  Get PAR parameters by request_uri.
+  Returns {:ok, params} if valid and not expired/used.
+  Marks the request as used after successful retrieval (single-use).
+  """
+  def get_par(request_uri) do
+    query =
+      from par in PushedAuthorizationRequest,
+        where: par.request_uri == ^request_uri,
+        where: par.used == false,
+        where: par.expires_at > ^DateTime.utc_now()
+
+    case Repo.one(query) do
+      nil ->
+        {:error, :not_found}
+
+      par ->
+        # Mark as used (single-use)
+        Repo.update!(PushedAuthorizationRequest.changeset(par, %{used: true}))
+
+        {:ok,
+         %{
+           response_type: par.response_type,
+           client_id: par.client_id,
+           redirect_uri: par.redirect_uri,
+           state: par.state,
+           code_challenge: par.code_challenge,
+           code_challenge_method: par.code_challenge_method,
+           scope: par.scope
+         }}
     end
   end
 
@@ -354,12 +411,16 @@ defmodule AetherPDSServer.OAuth do
   end
 
   @doc """
-  Clean up expired tokens (run periodically via a scheduled job).
+  Clean up expired tokens and PAR requests (run periodically via a scheduled job).
   """
   def cleanup_expired_tokens do
     now = DateTime.utc_now()
 
     Repo.transaction(fn ->
+      # Delete expired PAR requests
+      from(par in PushedAuthorizationRequest, where: par.expires_at < ^now)
+      |> Repo.delete_all()
+
       # Delete expired authorization codes
       from(ac in AuthorizationCode, where: ac.expires_at < ^now)
       |> Repo.delete_all()

@@ -81,20 +81,21 @@ defmodule AetherPDSServerWeb.OAuthController do
              validated_params[:code_challenge],
              validated_params[:code_challenge_method]
            ) do
-      # Generate request_uri (short-lived reference to the pushed request)
-      request_uri = "urn:ietf:params:oauth:request_uri:#{generate_request_uri()}"
+      # Store the PAR in the database
+      case OAuth.create_par(validated_params) do
+        {:ok, request_uri} ->
+          response = %{
+            request_uri: request_uri,
+            expires_in: 300
+          }
 
-      # Store the authorization request parameters temporarily (5 minutes expiry)
-      # Ensure table exists
-      ensure_par_table()
-      :ets.insert(:par_requests, {request_uri, validated_params, System.system_time(:second)})
+          json(conn, response)
 
-      response = %{
-        request_uri: request_uri,
-        expires_in: 300
-      }
-
-      json(conn, response)
+        {:error, _changeset} ->
+          conn
+          |> put_status(:internal_server_error)
+          |> json(%{error: "server_error", error_description: "Failed to create PAR"})
+      end
     else
       {:error, :invalid_client} ->
         conn
@@ -139,8 +140,8 @@ defmodule AetherPDSServerWeb.OAuthController do
           params
 
         request_uri ->
-          # Fetch parameters from PAR storage
-          case lookup_par_request(request_uri) do
+          # Fetch parameters from database
+          case OAuth.get_par(request_uri) do
             {:ok, stored_params} -> stored_params
             {:error, _} -> params
           end
@@ -620,37 +621,4 @@ defmodule AetherPDSServerWeb.OAuthController do
     end
   end
 
-  defp generate_request_uri do
-    :crypto.strong_rand_bytes(32)
-    |> Base.url_encode64(padding: false)
-  end
-
-  defp lookup_par_request(request_uri) do
-    # Ensure table exists
-    ensure_par_table()
-
-    case :ets.lookup(:par_requests, request_uri) do
-      [{^request_uri, params, timestamp}] ->
-        # Check if expired (5 minutes = 300 seconds)
-        if System.system_time(:second) - timestamp < 300 do
-          # Delete after use (single-use)
-          :ets.delete(:par_requests, request_uri)
-          {:ok, params}
-        else
-          :ets.delete(:par_requests, request_uri)
-          {:error, :expired}
-        end
-
-      [] ->
-        {:error, :not_found}
-    end
-  end
-
-  defp ensure_par_table do
-    try do
-      :ets.new(:par_requests, [:set, :public, :named_table])
-    rescue
-      ArgumentError -> :ok
-    end
-  end
 end
