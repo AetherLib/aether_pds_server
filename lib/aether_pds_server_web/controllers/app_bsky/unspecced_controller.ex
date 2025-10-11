@@ -260,6 +260,13 @@ defmodule AetherPDSServerWeb.AppBsky.UnspeccedController do
       labels: []
     }
 
+    # Hydrate embed if present in record
+    post =
+      case Map.get(record.value, "embed") do
+        nil -> post
+        embed -> Map.put(post, :embed, hydrate_embed(embed, record.repository_did))
+      end
+
     %{
       "$type" => "app.bsky.unspecced.defs#threadItemPost",
       post: post,
@@ -349,4 +356,59 @@ defmodule AetherPDSServerWeb.AppBsky.UnspeccedController do
   defp parse_boolean("false", _default), do: false
   defp parse_boolean(value, _default) when is_boolean(value), do: value
   defp parse_boolean(_, default), do: default
+
+  # Hydrate embed from record format to view format
+  defp hydrate_embed(embed, repository_did) when is_map(embed) do
+    case Map.get(embed, "$type") do
+      "app.bsky.embed.images" ->
+        %{
+          "$type" => "app.bsky.embed.images#view",
+          "images" =>
+            Enum.map(Map.get(embed, "images", []), fn image ->
+              %{
+                "thumb" => build_blob_url(image["image"], repository_did),
+                "fullsize" => build_blob_url(image["image"], repository_did),
+                "alt" => Map.get(image, "alt", ""),
+                "aspectRatio" => Map.get(image, "aspectRatio")
+              }
+              |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+              |> Map.new()
+            end)
+        }
+
+      "app.bsky.embed.external" ->
+        external = Map.get(embed, "external", %{})
+
+        %{
+          "$type" => "app.bsky.embed.external#view",
+          "external" => %{
+            "uri" => external["uri"],
+            "title" => external["title"],
+            "description" => external["description"],
+            "thumb" => if(external["thumb"], do: build_blob_url(external["thumb"], repository_did))
+          }
+          |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+          |> Map.new()
+        }
+
+      _ ->
+        # Unknown embed type, return as-is
+        embed
+    end
+  end
+
+  defp hydrate_embed(embed, _repository_did), do: embed
+
+  # Build blob URL from blob reference
+  defp build_blob_url(blob, repository_did) when is_map(blob) and is_binary(repository_did) do
+    cid = get_in(blob, ["ref", "$link"])
+
+    if cid do
+      "https://aetherlib.org/xrpc/com.atproto.sync.getBlob?did=#{URI.encode_www_form(repository_did)}&cid=#{URI.encode_www_form(cid)}"
+    else
+      nil
+    end
+  end
+
+  defp build_blob_url(_, _), do: nil
 end
