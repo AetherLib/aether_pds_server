@@ -20,6 +20,8 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
     # Stream upload to MinIO while calculating CID
     case MinioStorage.upload_blob(conn, did, mime_type) do
       {:ok, updated_conn, cid, size, storage_key} ->
+        Logger.info("MinIO upload successful - CID: #{cid}, Size: #{size}, Storage: #{storage_key}")
+
         # Store metadata in database
         blob_attrs = %{
           repository_did: did,
@@ -43,16 +45,17 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
             }
 
             Logger.info("Blob upload success - DID: #{did}, CID: #{cid}, Size: #{size}")
-            Logger.info("Sending response: #{inspect(response)}")
-            Logger.info("Original conn state: #{inspect(conn.state)}, body_params: #{inspect(conn.body_params)}")
-            Logger.info("Updated conn state: #{inspect(updated_conn.state)}, body_params: #{inspect(updated_conn.body_params)}")
 
-            # CRITICAL: Use the ORIGINAL conn, not updated_conn
-            # After reading the body with Plug.Conn.read_body, the updated_conn
-            # may be in a state that prevents proper response sending through proxies
-            result = json(conn, response)
-            Logger.info("After json/2 - state: #{inspect(result.state)}, resp_body length: #{inspect(byte_size(result.resp_body || ""))}")
-            result
+            # Manually encode and send response with explicit headers
+            # This ensures proper handling through HTTP/2 proxies like Cloudflare
+            json_body = Jason.encode!(response)
+
+            conn
+            |> put_resp_header("content-type", "application/json; charset=utf-8")
+            |> put_resp_header("content-length", Integer.to_string(byte_size(json_body)))
+            |> put_resp_header("cache-control", "no-cache, no-store, must-revalidate")
+            |> resp(200, json_body)
+            |> send_resp()
 
           {:error, changeset} ->
             Logger.error("Failed to save blob metadata: #{inspect(changeset)}")
