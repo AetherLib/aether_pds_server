@@ -51,7 +51,6 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
             |> put_resp_content_type("application/json")
             |> put_resp_header("content-length", Integer.to_string(content_length))
             |> send_resp(200, response_json)
-            |> halt()
 
           {:error, changeset} ->
             Logger.error("Failed to save blob metadata: #{inspect(changeset)}")
