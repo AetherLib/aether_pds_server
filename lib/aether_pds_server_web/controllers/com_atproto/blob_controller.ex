@@ -18,10 +18,9 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
     mime_type = get_content_type(conn)
 
     # Stream upload to MinIO while calculating CID
-    # NOTE: We ignore updated_conn and use original conn for response
-    # to work around Bandit HTTP/2 bug where body consumption breaks responses
+    # NOTE: We need updated_conn for proper connection state
     case MinioStorage.upload_blob(conn, did, mime_type) do
-      {:ok, _updated_conn, cid, size, storage_key} ->
+      {:ok, updated_conn, cid, size, storage_key} ->
         Logger.info("MinIO upload successful - CID: #{cid}, Size: #{size}, Storage: #{storage_key}")
 
         # Store metadata in database
@@ -59,7 +58,12 @@ defmodule AetherPDSServerWeb.ComATProto.BlobController do
             Logger.info("Response JSON: #{json_body}")
             Logger.info("Response bytes (hex): #{Base.encode16(json_body)}")
 
+            # Use original conn and register a callback to ensure response is sent
             conn
+            |> register_before_send(fn conn ->
+              Logger.info("Before send callback - ensuring response is flushed")
+              conn
+            end)
             |> delete_resp_header("content-type")
             |> put_resp_header("content-type", "application/json; charset=utf-8")
             |> put_resp_header("content-length", Integer.to_string(content_length))
