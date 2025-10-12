@@ -62,6 +62,30 @@ defmodule AetherPDSServer.DIDDocument do
   end
 
   @doc """
+  Generates a simple DID document for serving at /.well-known/did.json
+
+  This supports did:web method where DIDs are resolved via HTTPS.
+  """
+  def generate_for_web(account, pds_endpoint, domain) do
+    did = "did:web:#{domain}"
+
+    %{
+      "@context" => [
+        "https://www.w3.org/ns/did/v1"
+      ],
+      "id" => did,
+      "alsoKnownAs" => ["at://#{account.handle}", account.did],
+      "service" => [
+        %{
+          "id" => "#atproto_pds",
+          "type" => "AtprotoPersonalDataServer",
+          "serviceEndpoint" => pds_endpoint
+        }
+      ]
+    }
+  end
+
+  @doc """
   Validates a DID document structure.
 
   Returns {:ok, did_doc} if valid, {:error, reason} otherwise.
@@ -74,8 +98,6 @@ defmodule AetherPDSServer.DIDDocument do
   end
 
   def validate(_), do: {:error, :invalid_did_document}
-
-  # Private functions
 
   defp build_also_known_as(account, opts) do
     base = ["at://#{account.handle}"]
@@ -122,29 +144,5 @@ defmodule AetherPDSServer.DIDDocument do
     else
       {:error, :no_service_endpoints}
     end
-  end
-
-  @doc """
-  Generates a simple DID document for serving at /.well-known/did.json
-
-  This supports did:web method where DIDs are resolved via HTTPS.
-  """
-  def generate_for_web(account, pds_endpoint, domain) do
-    did = "did:web:#{domain}"
-
-    %{
-      "@context" => [
-        "https://www.w3.org/ns/did/v1"
-      ],
-      "id" => did,
-      "alsoKnownAs" => ["at://#{account.handle}", account.did],
-      "service" => [
-        %{
-          "id" => "#atproto_pds",
-          "type" => "AtprotoPersonalDataServer",
-          "serviceEndpoint" => pds_endpoint
-        }
-      ]
-    }
   end
 end

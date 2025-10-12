@@ -37,7 +37,7 @@ defmodule AetherPDSServer.DIDResolver do
 
     with {:ok, %{status: 200, body: did}} when is_binary(did) <- http_get(url),
          did <- String.trim(did) do
-      Logger.debug("Resolved handle #{handle} via HTTPS: #{did}")
+      # Logger.debug("Resolved handle #{handle} via HTTPS: #{did}")
       {:ok, did}
     else
       _ -> resolve_handle_via_dns(handle)
@@ -68,7 +68,7 @@ defmodule AetherPDSServer.DIDResolver do
 
         case http_get(url) do
           {:ok, %{status: 200, body: did_doc}} when is_map(did_doc) ->
-            Logger.debug("Resolved did:web document for #{domain}")
+            # Logger.debug("Resolved did:web document for #{domain}")
             {:ok, did_doc}
 
           {:ok, %{status: status}} ->
@@ -88,7 +88,7 @@ defmodule AetherPDSServer.DIDResolver do
 
     case http_get(url) do
       {:ok, %{status: 200, body: did_doc}} when is_map(did_doc) ->
-        Logger.debug("Resolved DID document for #{did}")
+        # Logger.debug("Resolved DID document for #{did}")
         {:ok, did_doc}
 
       {:ok, %{status: status}} ->
@@ -115,7 +115,7 @@ defmodule AetherPDSServer.DIDResolver do
       {:ok, "https://pds.example.com"}
   """
   def get_pds_endpoint(did_doc) when is_map(did_doc) do
-    Logger.debug("Extracting PDS endpoint from DID document")
+    # Logger.debug("Extracting PDS endpoint from DID document")
 
     did_doc
     |> Map.get("service", [])
@@ -177,7 +177,7 @@ defmodule AetherPDSServer.DIDResolver do
           ]
         }
 
-        Logger.debug("Resolved local did:web for #{domain}")
+        # Logger.debug("Resolved local did:web for #{domain}")
         {:ok, did_doc}
     end
   end
@@ -207,15 +207,15 @@ defmodule AetherPDSServer.DIDResolver do
 
   defp resolve_handle_via_dns(handle) do
     dns_name = ~c"_atproto.#{handle}"
-    Logger.debug("Resolving handle via DNS TXT record: #{dns_name}")
+    # Logger.debug("Resolving handle via DNS TXT record: #{dns_name}")
 
     with txt_records when txt_records != [] <- safe_dns_lookup(dns_name),
          did when not is_nil(did) <- parse_did_from_txt_records(txt_records) do
-      Logger.debug("Resolved handle #{handle} via DNS: #{did}")
+      # Logger.debug("Resolved handle #{handle} via DNS: #{did}")
       {:ok, did}
     else
       _ ->
-        Logger.debug("No valid DID found in DNS for #{handle}")
+        # Logger.debug("No valid DID found in DNS for #{handle}")
         {:error, :handle_resolution_failed}
     end
   end
@@ -229,7 +229,7 @@ defmodule AetherPDSServer.DIDResolver do
   end
 
   defp parse_did_from_txt_records(txt_records) do
-    Logger.debug("Parsing DID from DNS TXT records: #{inspect(txt_records)}")
+    # Logger.debug("Parsing DID from DNS TXT records: #{inspect(txt_records)}")
 
     Enum.find_value(txt_records, fn record ->
       txt_value =
@@ -238,7 +238,7 @@ defmodule AetherPDSServer.DIDResolver do
         |> List.to_string()
         |> String.trim()
 
-      Logger.debug("Parsed TXT value: #{txt_value}")
+      # Logger.debug("Parsed TXT value: #{txt_value}")
 
       case txt_value do
         "did=" <> did -> did

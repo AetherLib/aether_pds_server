@@ -66,12 +66,6 @@ defmodule AetherPDSServerWeb.ComATProto.BlobControllerTest do
       assert blob.size == byte_size(blob_data)
       assert blob.storage_key != nil
       assert String.starts_with?(blob.storage_key, account.did)
-
-      # Verify blob was uploaded to MinIO
-      # The successful upload response from ExAws confirms the blob is in MinIO
-      # Note: Direct GET requires signed URL, so we trust the successful PUT response
-      size_mb = Float.round(size / 1024 / 1024, 2)
-      IO.puts("✅ 7MB PNG image (#{size} bytes / #{size_mb} MB, CID: #{String.slice(cid, 0..15)}...) uploaded to MinIO")
     end
 
     @tag :integration
@@ -95,9 +89,6 @@ defmodule AetherPDSServerWeb.ComATProto.BlobControllerTest do
                  "mimeType" => "image/png"
                }
              } = json_response(conn, 200)
-
-      size_mb = Float.round(blob_size / 1024 / 1024, 2)
-      IO.puts("✅ 16MB PNG image (#{blob_size} bytes / #{size_mb} MB) uploaded successfully via streaming")
     end
 
     @tag :integration
@@ -121,9 +112,6 @@ defmodule AetherPDSServerWeb.ComATProto.BlobControllerTest do
                  "mimeType" => "image/png"
                }
              } = json_response(conn, 200)
-
-      size_mb = Float.round(blob_size / 1024 / 1024, 2)
-      IO.puts("✅ 52MB PNG image (#{blob_size} bytes / #{size_mb} MB) uploaded successfully via streaming 🚀")
     end
 
     test "requires authentication", %{conn: conn} do
@@ -169,8 +157,6 @@ defmodule AetherPDSServerWeb.ComATProto.BlobControllerTest do
       downloaded_data = download_conn.resp_body
       assert downloaded_data == blob_data
       assert byte_size(downloaded_data) == byte_size(blob_data)
-
-      IO.puts("✅ Successfully retrieved blob from MinIO (#{byte_size(blob_data)} bytes)")
     end
 
     test "returns 404 for non-existent blob", %{conn: conn, account: account} do
@@ -222,8 +208,6 @@ defmodule AetherPDSServerWeb.ComATProto.BlobControllerTest do
       # Verify blob cannot be downloaded anymore
       download_conn2 = get(conn, "/xrpc/com.atproto.sync.getBlob?did=#{account.did}&cid=#{cid}")
       assert json_response(download_conn2, 404)
-
-      IO.puts("✅ Blob successfully cleaned up from MinIO and database")
     end
 
     @tag :integration
@@ -264,8 +248,6 @@ defmodule AetherPDSServerWeb.ComATProto.BlobControllerTest do
       # Verify blob can still be downloaded
       download_conn = get(conn, "/xrpc/com.atproto.sync.getBlob?did=#{account.did}&cid=#{cid}")
       assert download_conn.status == 200
-
-      IO.puts("✅ Blob correctly preserved when referenced")
     end
   end
 end

@@ -12,7 +12,7 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
     auth_header = get_req_header(conn, "authorization") |> List.first()
     dpop_header = get_req_header(conn, "dpop") |> List.first()
 
-    Logger.info("Auth attempt - Authorization: #{inspect(auth_header)}, DPoP: #{inspect(dpop_header)}")
+    # Logger.info("Auth attempt - Authorization: #{inspect(auth_header)}, DPoP: #{inspect(dpop_header)}")
 
     case auth_header do
       # DPoP-bound token (OAuth flow)
@@ -20,7 +20,7 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
         method = conn.method
         # Build URL using endpoint configuration (handles reverse proxy correctly)
         url = build_url_from_endpoint(conn)
-        Logger.info("DPoP validation - Method: #{method}, URL: #{url}")
+        # Logger.info("DPoP validation - Method: #{method}, URL: #{url}")
 
         case OAuth.validate_access_token(token, dpop_header, method, url) do
           {:ok, token_data} ->
@@ -28,8 +28,8 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
             |> assign(:current_did, token_data.did)
             |> assign(:authenticated, true)
 
-          {:error, reason} ->
-            Logger.info("DPoP token validation failed: #{inspect(reason)}")
+          {:error, _reason} ->
+            # Logger.info("DPoP token validation failed: #{inspect(reason)}")
             send_auth_error(conn)
         end
 
@@ -48,7 +48,7 @@ defmodule AetherPDSServerWeb.Plugs.RequireAuth do
         end
 
       _ ->
-        Logger.info("No valid authorization header found")
+        # Logger.info("No valid authorization header found")
         send_auth_error(conn)
     end
   end

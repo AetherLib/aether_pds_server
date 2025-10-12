@@ -156,12 +156,8 @@ defmodule AetherPDSServer.MinioStorage do
 
   # Upload data to MinIO using ExAws (which handles AWS Signature V4 authentication).
   defp upload_to_minio(storage_key, body_data, mime_type, _content_length, config) do
-    # Use ExAws.S3 to upload with proper AWS Signature V4 signing
     bucket = config.bucket
-
     operation = ExAws.S3.put_object(bucket, storage_key, body_data, content_type: mime_type)
-
-    # Configure ExAws with MinIO endpoint
     uri = URI.parse(config.endpoint)
 
     ex_aws_config = [

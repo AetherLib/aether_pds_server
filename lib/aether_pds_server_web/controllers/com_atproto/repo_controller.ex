@@ -92,7 +92,6 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
         # Calculate CID for the record
         record_cid = generate_cid(record_data)
 
-        # Create the record
         record_attrs = %{
           repository_did: did,
           collection: collection,

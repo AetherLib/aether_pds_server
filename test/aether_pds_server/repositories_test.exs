@@ -353,6 +353,7 @@ defmodule AetherPDSServer.RepositoriesTest do
         size: 200,
         data: <<>>
       })
+      |> dbg()
 
       blobs = Repositories.list_blobs(did)
       assert length(blobs) == 2

@@ -25,7 +25,6 @@ defmodule AetherPDSServer.Federation do
 
   @doc """
   Discovers the PDS endpoint for a handle or DID.
-
   Returns the PDS endpoint URL where the user's data is hosted.
 
   ## Examples
@@ -37,11 +36,11 @@ defmodule AetherPDSServer.Federation do
       {:ok, "https://pds.example.com"}
   """
   def discover_pds("did:" <> _ = did) do
-    Logger.debug("Discovering PDS for DID: #{did}")
+    # Logger.debug("Discovering PDS for DID: #{did}")
 
     with {:ok, did_doc} <- DIDResolver.resolve_did(did),
          {:ok, pds_endpoint} <- DIDResolver.get_pds_endpoint(did_doc) do
-      Logger.info("Discovered PDS for #{did}: #{pds_endpoint}")
+      # Logger.info("Discovered PDS for #{did}: #{pds_endpoint}")
       {:ok, pds_endpoint}
     else
       {:error, reason} = error ->
@@ -51,11 +50,11 @@ defmodule AetherPDSServer.Federation do
   end
 
   def discover_pds(handle) when is_binary(handle) do
-    Logger.debug("Discovering PDS for handle: #{handle}")
+    # Logger.debug("Discovering PDS for handle: #{handle}")
 
     with {:ok, did} <- DIDResolver.resolve_handle(handle),
          {:ok, pds_endpoint} <- discover_pds(did) do
-      Logger.info("Discovered PDS for #{handle}: #{pds_endpoint}")
+      # Logger.info("Discovered PDS for #{handle}: #{pds_endpoint}")
       {:ok, pds_endpoint}
     else
       {:error, reason} = error ->
@@ -78,11 +77,11 @@ defmodule AetherPDSServer.Federation do
       {:ok, %{"uri" => "at://...", "value" => %{"text" => "Hello!"}}}
   """
   def fetch_remote_record(did, collection, rkey) do
-    Logger.debug("Fetching remote record: #{did}/#{collection}/#{rkey}")
+    # Logger.debug("Fetching remote record: #{did}/#{collection}/#{rkey}")
 
     with {:ok, pds_endpoint} <- discover_pds(did),
          {:ok, record} <- fetch_record_from_pds(pds_endpoint, did, collection, rkey) do
-      Logger.info("Fetched remote record: #{did}/#{collection}/#{rkey}")
+      # # Logger.info("Fetched remote record: #{did}/#{collection}/#{rkey}")
       {:ok, record}
     else
       {:error, reason} = error ->
@@ -110,13 +109,13 @@ defmodule AetherPDSServer.Federation do
       {:ok, %{"records" => [...], "cursor" => "..."}}
   """
   def fetch_remote_records(did, collection, opts \\ []) do
-    Logger.debug("Fetching remote records: #{did}/#{collection}")
+    # Logger.debug("Fetching remote records: #{did}/#{collection}")
 
     with {:ok, pds_endpoint} <- discover_pds(did),
          {:ok, records} <- list_records_from_pds(pds_endpoint, did, collection, opts) do
-      Logger.info(
-        "Fetched #{length(Map.get(records, "records", []))} records from #{did}/#{collection}"
-      )
+      # Logger.info(
+      #   "Fetched #{length(Map.get(records, "records", []))} records from #{did}/#{collection}"
+      # )
 
       {:ok, records}
     else
@@ -137,12 +136,12 @@ defmodule AetherPDSServer.Federation do
   Note: This is a placeholder for full implementation.
   """
   def verify_remote_repository(did) do
-    Logger.debug("Verifying remote repository: #{did}")
+    # Logger.debug("Verifying remote repository: #{did}")
 
     with {:ok, pds_endpoint} <- discover_pds(did),
          {:ok, _repo_data} <- describe_repo_from_pds(pds_endpoint, did) do
       # TODO: Implement full verification
-      Logger.info("Repository #{did} verified (basic check)")
+      # Logger.info("Repository #{did} verified (basic check)")
       {:ok, :verified}
     else
       {:error, reason} = error ->

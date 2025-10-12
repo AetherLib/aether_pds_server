@@ -5,7 +5,14 @@ defmodule AetherPDSServer.OAuth do
 
   import Ecto.Query
   alias AetherPDSServer.Repo
-  alias AetherPDSServer.OAuth.{AuthorizationCode, AccessToken, RefreshToken, PushedAuthorizationRequest}
+
+  alias AetherPDSServer.OAuth.{
+    AuthorizationCode,
+    AccessToken,
+    RefreshToken,
+    PushedAuthorizationRequest
+  }
+
   alias Aether.ATProto.Crypto.DPoP
 
   # ============================================================================
@@ -14,35 +21,35 @@ defmodule AetherPDSServer.OAuth do
 
   @doc """
   Validate a client_id and redirect_uri combination.
-
   Returns {:ok, client_info} if valid, {:error, reason} otherwise.
   """
-  def validate_client(client_id, redirect_uri) do
-    # Parse client_id (could be URL with metadata or loopback)
-    cond do
-      # Loopback client (for development/localhost apps)
-      String.starts_with?(client_id, "http://localhost") or
-          String.starts_with?(client_id, "http://127.0.0.1") ->
-        {:ok,
-         %{
-           id: client_id,
-           name: "Local Development Client",
-           type: :loopback,
-           redirect_uri: redirect_uri
-         }}
+  def validate_client(client_id, redirect_uri)
 
-      # Web-based client (must fetch client metadata)
-      String.starts_with?(client_id, "http://") or
-          String.starts_with?(client_id, "https://") ->
-        fetch_client_metadata(client_id, redirect_uri)
+  def validate_client("http://localhost" <> _rest = client_id, redirect_uri),
+    do: {:ok, loopback_client(client_id, redirect_uri)}
 
-      true ->
-        {:error, :invalid_client}
-    end
+  def validate_client("http://127.0.0.1" <> _rest = client_id, redirect_uri),
+    do: {:ok, loopback_client(client_id, redirect_uri)}
+
+  def validate_client("http://" <> _rest = client_id, redirect_uri),
+    do: fetch_client_metadata(client_id, redirect_uri)
+
+  def validate_client("https://" <> _rest = client_id, redirect_uri),
+    do: fetch_client_metadata(client_id, redirect_uri)
+
+  def validate_client(_client_id, _redirect_uri),
+    do: {:error, :invalid_client}
+
+  defp loopback_client(client_id, redirect_uri) do
+    %{
+      id: client_id,
+      name: "Local Development Client",
+      type: :loopback,
+      redirect_uri: redirect_uri
+    }
   end
 
   defp fetch_client_metadata(client_id, expected_redirect_uri) do
-    # Fetch client metadata from client_id URL
     metadata_url = "#{client_id}/client-metadata.json"
 
     case Req.get(metadata_url) do

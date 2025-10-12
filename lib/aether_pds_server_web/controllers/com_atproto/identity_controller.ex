@@ -49,7 +49,7 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
 
     # Look up the account by handle
     case Accounts.get_account_by_handle(host) do
-      %{did: did, handle: handle} = account ->
+      %{did: did, handle: handle} = _account ->
         # Get the PDS endpoint from the application config
         pds_endpoint = get_pds_endpoint()
 
@@ -68,6 +68,8 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
               "serviceEndpoint" => pds_endpoint
             }
           ]
+          # TODO: Why is this not like the did doc?
+          # Is the did doc already generating this?
           # "verificationMethod" => [
           #   %{
           #     "id" => "#{did}#atproto",
@@ -144,7 +146,6 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
     end
   end
 
-  # Private helper to get PDS endpoint
   defp get_pds_endpoint do
     endpoint_config = Application.get_env(:aether_pds_server, AetherPDSServerWeb.Endpoint)
     url_config = Keyword.get(endpoint_config, :url, [])
@@ -152,7 +153,6 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
     port = Keyword.get(url_config, :port, 4000)
     scheme = if Keyword.get(url_config, :scheme) == "https", do: "https", else: "http"
 
-    # Only include port if it's not the default for the scheme
     port_suffix =
       cond do
         scheme == "https" and port == 443 -> ""
