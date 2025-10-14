@@ -105,10 +105,57 @@ defmodule AetherPDSServer.DIDDocument do
     base ++ additional
   end
 
-  defp build_verification_methods(_account, opts) do
-    # For now, return custom verification methods from opts
-    # In a full implementation, you'd generate signing keys here
-    Keyword.get(opts, :verification_methods, [])
+  defp build_verification_methods(account, opts) do
+    # Check if custom verification methods provided in opts
+    case Keyword.get(opts, :verification_methods) do
+      nil ->
+        # Load signing keys from database
+        build_verification_methods_from_db(account)
+
+      custom_methods ->
+        custom_methods
+    end
+  end
+
+  defp build_verification_methods_from_db(%{__struct__: _} = account) do
+    # Account is an Ecto struct - preload signing keys
+    account = AetherPDSServer.Repo.preload(account, :signing_keys)
+
+    # Include active and rotated keys (but not revoked keys)
+    # This allows verification of historical commits signed with rotated keys
+    valid_keys =
+      (account.signing_keys || [])
+      |> Enum.filter(fn key -> key.status in ["active", "rotated"] end)
+      |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+
+    case valid_keys do
+      [] ->
+        []
+
+      keys ->
+        Enum.map(keys, fn key ->
+          # The active key gets the standard #atproto fragment identifier
+          # Rotated keys get a unique identifier based on their ID
+          key_id =
+            if key.status == "active" do
+              "#{account.did}#atproto"
+            else
+              "#{account.did}#atproto-#{key.id}"
+            end
+
+          %{
+            "id" => key_id,
+            "type" => "Multikey",
+            "controller" => account.did,
+            "publicKeyMultibase" => key.public_key_multibase
+          }
+        end)
+    end
+  end
+
+  defp build_verification_methods_from_db(_account) do
+    # Account is a plain map (used in tests) - no keys available
+    []
   end
 
   defp build_services(pds_endpoint) do

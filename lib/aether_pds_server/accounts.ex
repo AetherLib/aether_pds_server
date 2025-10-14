@@ -7,7 +7,9 @@ defmodule AetherPDSServer.Accounts do
   alias AetherPDSServer.Repo
   alias AetherPDSServer.Repositories
   alias AetherPDSServer.Accounts.Account
+  alias AetherPDSServer.Accounts.SigningKey
   alias AetherPDSServer.Accounts.AppPassword
+  alias AetherPDSServer.Crypto.SigningKey, as: SigningKeyCrypto
 
   # ============================================================================
   # Account Management
@@ -26,12 +28,13 @@ defmodule AetherPDSServer.Accounts do
       |> Map.put(:password_hash, hash_password(attrs.password))
       |> Map.delete(:password)
 
-    # Create account, repository, and profile in a transaction
+    # Create account, signing key, repository, and profile in a transaction
     Repo.transaction(fn ->
       with {:ok, account} <-
              %Account{}
              |> Account.changeset(account_attrs)
              |> Repo.insert(),
+           {:ok, _signing_key} <- create_signing_key_for_account(account),
            {:ok, _repository} <- create_repository_for_account(account),
            {:ok, _profile} <- create_default_profile(account) do
         account
@@ -39,6 +42,158 @@ defmodule AetherPDSServer.Accounts do
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  @doc """
+  Create a signing key for an account.
+  """
+  def create_signing_key_for_account(account, key_type \\ "k256") do
+    with {:ok, key_pair} <- SigningKeyCrypto.generate_key_pair(key_type) do
+      signing_key_attrs = %{
+        account_id: account.id,
+        public_key_multibase: key_pair.public_key_multibase,
+        private_key_encrypted: key_pair.private_key_encrypted,
+        key_type: key_type,
+        status: "active"
+      }
+
+      %SigningKey{}
+      |> SigningKey.changeset(signing_key_attrs)
+      |> Repo.insert()
+    end
+  end
+
+  # ============================================================================
+  # Signing Key Management
+  # ============================================================================
+
+  @doc """
+  Get the active signing key for an account.
+  """
+  def get_active_signing_key(account_id) when is_integer(account_id) do
+    import Ecto.Query
+
+    Repo.one(
+      from sk in SigningKey,
+        where: sk.account_id == ^account_id and sk.status == "active"
+    )
+  end
+
+  @doc """
+  Get the active signing key for an account by DID.
+  """
+  def get_active_signing_key_by_did(did) when is_binary(did) do
+    case get_account_by_did(did) do
+      nil -> nil
+      account -> get_active_signing_key(account.id)
+    end
+  end
+
+  @doc """
+  List all signing keys for an account (active, rotated, and revoked).
+  """
+  def list_signing_keys(account_id) when is_integer(account_id) do
+    import Ecto.Query
+
+    Repo.all(
+      from sk in SigningKey,
+        where: sk.account_id == ^account_id,
+        order_by: [desc: sk.inserted_at]
+    )
+  end
+
+  @doc """
+  Rotate an account's signing key.
+
+  This operation:
+  1. Marks the current active key as "rotated" with a timestamp
+  2. Generates a new signing key and marks it as "active"
+  3. Returns both the old (rotated) key and the new (active) key
+
+  The operation is atomic - both updates happen in a transaction.
+
+  ## Parameters
+  - account_or_did: Account struct or DID string
+  - key_type: Key type for the new key (default: "k256")
+
+  ## Returns
+  - {:ok, %{old_key: old_key, new_key: new_key}}
+  - {:error, reason}
+  """
+  def rotate_signing_key(account_or_did, key_type \\ "k256")
+
+  def rotate_signing_key(%Account{} = account, key_type) do
+    Repo.transaction(fn ->
+      # Get the current active key
+      case get_active_signing_key(account.id) do
+        nil ->
+          Repo.rollback(:no_active_key)
+
+        old_key ->
+          # Mark old key as rotated
+          rotation_result =
+            old_key
+            |> SigningKey.rotation_changeset(%{
+              status: "rotated",
+              rotated_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+            })
+            |> Repo.update()
+
+          case rotation_result do
+            {:ok, rotated_key} ->
+              # Generate new key
+              case create_signing_key_for_account(account, key_type) do
+                {:ok, new_key} ->
+                  %{old_key: rotated_key, new_key: new_key}
+
+                {:error, reason} ->
+                  Repo.rollback(reason)
+              end
+
+            {:error, reason} ->
+              Repo.rollback(reason)
+          end
+      end
+    end)
+  end
+
+  def rotate_signing_key(did, key_type) when is_binary(did) do
+    case get_account_by_did(did) do
+      nil -> {:error, :account_not_found}
+      account -> rotate_signing_key(account, key_type)
+    end
+  end
+
+  @doc """
+  Revoke a signing key.
+
+  This marks a key as revoked, preventing it from being used for signing.
+  You cannot revoke the currently active key - you must rotate it first.
+
+  ## Parameters
+  - key_id: The ID of the signing key to revoke
+
+  ## Returns
+  - {:ok, revoked_key}
+  - {:error, reason}
+  """
+  def revoke_signing_key(key_id) when is_integer(key_id) do
+    case Repo.get(SigningKey, key_id) do
+      nil ->
+        {:error, :key_not_found}
+
+      key ->
+        if key.status == "active" do
+          {:error, :cannot_revoke_active_key}
+        else
+          key
+          |> SigningKey.rotation_changeset(%{
+            status: "revoked",
+            rotated_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+          })
+          |> Repo.update()
+        end
+    end
   end
 
   defp create_default_profile(account) do
@@ -74,6 +229,7 @@ defmodule AetherPDSServer.Accounts do
   """
   def create_repository_for_account(account) do
     alias AetherPDSServer.Repositories
+    alias AetherPDSServer.Repositories.CommitSigner
     alias Aether.ATProto.{MST, Commit, CID}
 
     # Create empty MST
@@ -88,6 +244,12 @@ defmodule AetherPDSServer.Accounts do
     commit_cid = Commit.cid(commit)
     commit_cid_string = CID.cid_to_string(commit_cid)
 
+    # Sign the commit
+    signature = case CommitSigner.sign_commit(commit, account.did) do
+      {:ok, sig} -> sig
+      {:error, _} -> nil  # Optional: allow unsigned commits for now
+    end
+
     # Create repository with initial commit
     repository_attrs = %{
       did: account.did,
@@ -101,6 +263,7 @@ defmodule AetherPDSServer.Accounts do
              cid: commit_cid_string,
              rev: rev,
              prev: nil,
+             signature: signature,
              data: %{
                version: 3,
                did: account.did,

@@ -5,7 +5,7 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
   use AetherPDSServerWeb, :controller
 
   alias AetherPDSServer.Repositories
-  alias AetherPDSServer.Repositories.{Repository, Record}
+  alias AetherPDSServer.Repositories.{Repository, Record, CommitSigner}
   alias Aether.ATProto.{CID, TID, MST, Commit}
 
   # ============================================================================
@@ -425,11 +425,15 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
       commit_cid = Commit.cid(commit)
       commit_cid_string = CID.cid_to_string(commit_cid)
 
+      # Sign the commit
+      signature = sign_commit(commit, repo_did)
+
       commit_attrs = %{
         repository_did: repo_did,
         cid: commit_cid_string,
         rev: rev,
         prev: repo.head_cid,
+        signature: signature,
         data: %{
           version: 3,
           did: repo_did,
@@ -657,11 +661,15 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
       commit_cid = Commit.cid(commit)
       commit_cid_string = CID.cid_to_string(commit_cid)
 
+      # Sign the commit
+      signature = sign_commit(commit, did)
+
       commit_attrs = %{
         repository_did: did,
         cid: commit_cid_string,
         rev: rev,
         prev: repo.head_cid,
+        signature: signature,
         data: %{
           version: 3,
           did: did,
@@ -737,11 +745,15 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
       commit_cid = Commit.cid(commit)
       commit_cid_string = CID.cid_to_string(commit_cid)
 
+      # Sign the commit
+      signature = sign_commit(commit, did)
+
       commit_attrs = %{
         repository_did: did,
         cid: commit_cid_string,
         rev: rev,
         prev: repo.head_cid,
+        signature: signature,
         data: %{
           version: 3,
           did: did,
@@ -814,11 +826,15 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
       commit_cid = Commit.cid(commit)
       commit_cid_string = CID.cid_to_string(commit_cid)
 
+      # Sign the commit
+      signature = sign_commit(commit, did)
+
       commit_attrs = %{
         repository_did: did,
         cid: commit_cid_string,
         rev: rev,
         prev: repo.head_cid,
+        signature: signature,
         data: %{
           version: 3,
           did: did,
@@ -858,6 +874,14 @@ defmodule AetherPDSServerWeb.ComATProto.RepoController do
 
   defp generate_tid do
     TID.new()
+  end
+
+  # Sign a commit and return the signature (or nil if signing fails)
+  defp sign_commit(commit, did) do
+    case CommitSigner.sign_commit(commit, did) do
+      {:ok, signature} -> signature
+      {:error, _} -> nil  # Allow unsigned commits to not break existing functionality
+    end
   end
 
   # Extract blob CIDs from record value and create blob references

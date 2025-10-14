@@ -15,6 +15,9 @@ defmodule AetherPDSServer.Accounts.Account do
     # Virtual field for password input
     field :password, :string, virtual: true
 
+    # Associations
+    has_many :signing_keys, AetherPDSServer.Accounts.SigningKey
+
     timestamps()
   end
 

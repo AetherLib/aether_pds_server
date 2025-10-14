@@ -49,43 +49,19 @@ defmodule AetherPDSServerWeb.ComATProto.IdentityController do
 
     # Look up the account by handle
     case Accounts.get_account_by_handle(host) do
-      %{did: did, handle: handle} = _account ->
-        # Get the PDS endpoint from the application config
-        pds_endpoint = get_pds_endpoint()
-
-        # Generate the DID document
-        did_doc = %{
-          "@context" => [
-            "https://www.w3.org/ns/did/v1",
-            "https://w3id.org/security/suites/secp256k1-2019/v1"
-          ],
-          "id" => did,
-          "alsoKnownAs" => ["at://#{handle}"],
-          "service" => [
-            %{
-              "id" => "#atproto_pds",
-              "type" => "AtprotoPersonalDataServer",
-              "serviceEndpoint" => pds_endpoint
-            }
-          ]
-          # TODO: Why is this not like the did doc?
-          # Is the did doc already generating this?
-          # "verificationMethod" => [
-          #   %{
-          #     "id" => "#{did}#atproto",
-          #     "type" => "Multikey",
-          #     "controller" => did,
-          #     "publicKeyMultibase" => public_key_multibase
-          #   }
-          # ]
-        }
-
-        json(conn, did_doc)
-
       nil ->
         conn
         |> put_status(:not_found)
         |> json(%{error: "NotFound", message: "Handle not found"})
+
+      account ->
+        # Get the PDS endpoint from the application config
+        pds_endpoint = get_pds_endpoint()
+
+        # Use DIDDocument module to generate complete document with verificationMethod
+        did_doc = AetherPDSServer.DIDDocument.generate(account, pds_endpoint)
+
+        json(conn, did_doc)
     end
   end
 

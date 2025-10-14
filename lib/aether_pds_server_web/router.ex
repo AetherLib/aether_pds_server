@@ -186,6 +186,10 @@ defmodule AetherPDSServerWeb.Router do
          ComATProto.ServerController,
          :reserve_signing_key
 
+    post "/com.atproto.server.rotateSigningKey",
+         ComATProto.ServerController,
+         :rotate_signing_key
+
     post "/com.atproto.repo.applyWrites", ComATProto.RepoController, :apply_writes
     post "/com.atproto.repo.createRecord", ComATProto.RepoController, :create_record
     post "/com.atproto.repo.putRecord", ComATProto.RepoController, :put_record

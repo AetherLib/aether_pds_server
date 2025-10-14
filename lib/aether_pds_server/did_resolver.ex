@@ -158,24 +158,9 @@ defmodule AetherPDSServer.DIDResolver do
         {:error, :not_local}
 
       account ->
-        # Generate DID document locally without HTTP request
+        # Generate DID document locally using DIDDocument module
         pds_endpoint = get_local_pds_endpoint()
-
-        did_doc = %{
-          "@context" => [
-            "https://www.w3.org/ns/did/v1",
-            "https://w3id.org/security/suites/secp256k1-2019/v1"
-          ],
-          "id" => account.did,
-          "alsoKnownAs" => ["at://#{account.handle}"],
-          "service" => [
-            %{
-              "id" => "#atproto_pds",
-              "type" => "AtprotoPersonalDataServer",
-              "serviceEndpoint" => pds_endpoint
-            }
-          ]
-        }
+        did_doc = AetherPDSServer.DIDDocument.generate(account, pds_endpoint)
 
         # Logger.debug("Resolved local did:web for #{domain}")
         {:ok, did_doc}

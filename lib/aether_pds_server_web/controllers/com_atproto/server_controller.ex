@@ -529,6 +529,52 @@ defmodule AetherPDSServerWeb.ComATProto.ServerController do
     end
   end
 
+  @doc """
+  POST /xrpc/com.atproto.server.rotateSigningKey
+
+  Rotate the signing key for the authenticated user's account.
+
+  This operation:
+  1. Marks the current active key as "rotated"
+  2. Generates a new signing key
+  3. Updates the DID document with both keys (for historical verification)
+
+  Returns the new public key in multibase format.
+  """
+  def rotate_signing_key(conn, _params) do
+    did = conn.assigns[:current_did]
+
+    case Accounts.rotate_signing_key(did) do
+      {:ok, %{old_key: _old_key, new_key: new_key}} ->
+        json(conn, %{
+          publicKeyMultibase: new_key.public_key_multibase,
+          keyType: new_key.key_type,
+          status: "active"
+        })
+
+      {:error, :account_not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "AccountNotFound", message: "Account not found"})
+
+      {:error, :no_active_key} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{
+          error: "NoActiveKey",
+          message: "No active signing key found. Cannot rotate."
+        })
+
+      {:error, reason} ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{
+          error: "InternalServerError",
+          message: "Failed to rotate signing key: #{inspect(reason)}"
+        })
+    end
+  end
+
   # Helper functions
 
   defp generate_service_token(did, audience, exp_seconds) do

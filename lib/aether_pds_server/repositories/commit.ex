@@ -8,6 +8,7 @@ defmodule AetherPDSServer.Repositories.Commit do
     field :rev, :string
     field :prev, :string
     field :data, :map
+    field :signature, :string
 
     belongs_to :repository, AetherPDSServer.Repositories.Repository,
       foreign_key: :repository_did,
@@ -20,7 +21,7 @@ defmodule AetherPDSServer.Repositories.Commit do
   @doc false
   def changeset(commit, attrs) do
     commit
-    |> cast(attrs, [:repository_did, :cid, :rev, :prev, :data])
+    |> cast(attrs, [:repository_did, :cid, :rev, :prev, :data, :signature])
     |> validate_required([:repository_did, :cid, :rev, :data])
     |> unique_constraint([:repository_did, :cid])
   end
